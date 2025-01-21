@@ -1,0 +1,72 @@
+<?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+//require_once('vendor/autoload.php');
+require_once ('vendor/autoload.php');
+require 'constants.php';
+
+date_default_timezone_set('America/Mexico_City');
+
+$usuario = 'PruebasTimbrado';
+$password = '@Notiene1';
+
+$client = new \GuzzleHttp\Client();
+
+try {
+  $response = $client->request('DELETE', 'https://testapi.facturoporti.com.mx/token/borrar', [
+      'body' => '{"usuario":"PruebasTimbrado","password":"@Notiene1"}',
+      'headers' => [
+          'accept' => 'application/json',
+          'content-type' => 'application/*+json',
+      ],
+  ]);
+} catch (\Exception $e) {
+  echo json_encode([
+  'status' => 'error',
+  'message' => 'Ha ocurrido un error inesperado.',
+  'desc' => $e->getMessage(),
+  ]);
+  exit;
+}
+
+try {
+  $responseToken = $client->request('GET', 'https://testapi.facturoporti.com.mx/token/crear?Usuario='.$usuario.'&Password='.$password.'', [
+      'headers' => [
+          'accept' => 'application/json',
+      ],
+  ]);
+
+  //echo $responseToken->getBody()->getContents();
+  $tokenData = json_decode($responseToken->getBody()->getContents(), true);
+  $token = $tokenData['token'] ?? '';
+
+  $con = new mysqli(DB_SERVER, DB_USER, DB_PASSWORD, DB_NAME);
+  $sql = "INSERT INTO `token`(`token`, `creacion`) VALUES (?,NOW())";
+  $stmt = $con->prepare($sql);
+  if ($stmt === false) {
+      throw new Exception("Error en la preparación de la consulta: " . $con->error);
+  }
+
+  $fechaActual = date('Y-m-d H:i:s');
+
+  // Vincular parámetros y ejecutar
+  $stmt->bind_param("s", $token);
+  if (!$stmt->execute()) {
+      throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
+  }
+
+  $stmt->close();
+  //echo $token;
+} catch (\Exception $e) {
+  echo json_encode([
+  'status' => 'error',
+  'message' => 'Ha ocurrido un error inesperado.',
+  'desc' => $e->getMessage(),
+  ]);
+  exit;
+}
+
+echo $responseToken->getBody();
+?>
