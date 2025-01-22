@@ -2,11 +2,12 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST');
+
 header('Content-Type: application/json');
-//print_r('Hola');
 require '../.env';
+
+require_once "cors.php";
+cors();
 
 $con = new mysqli(DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME);
 

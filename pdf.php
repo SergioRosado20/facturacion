@@ -11,6 +11,8 @@ require 'vendor/autoload.php';
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\PngWriter;
 use Endroid\QrCode\Color\Color;
+require_once "cors.php";
+cors();
 
 if($_GET['archivo'] && $_GET['pdf'] && $_GET['id']) {
     $archivo = $_GET['archivo'];

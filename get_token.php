@@ -6,6 +6,8 @@ error_reporting(E_ALL);
 //require_once('vendor/autoload.php');
 require_once ('vendor/autoload.php');
 require 'constants.php';
+require_once "cors.php";
+cors();
 
 date_default_timezone_set('America/Mexico_City');
 

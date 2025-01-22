@@ -6,6 +6,8 @@ require 'constants.php';
 require 'pdf.php';
 require 'log_helper.php';
 require_once('vendor/autoload.php');
+require_once "cors.php";
+cors();
 
 date_default_timezone_set('America/Mexico_City');
 session_start();
