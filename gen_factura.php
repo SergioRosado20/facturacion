@@ -2,7 +2,6 @@
 /*ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
-require 'constants.php';
 require 'pdf.php';
 require 'log_helper.php';
 require_once('vendor/autoload.php');
@@ -16,16 +15,28 @@ $client = new \GuzzleHttp\Client();
 
 $username = $_SESSION['username'];
 
-$con = new mysqli(DB_SERVER, DB_USER, DB_PASSWORD, DB_NAME);
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv->load();
+
+$database_host = $_ENV['DATABASE_HOST'] ?? '';
+$database_user = $_ENV['DATABASE_USER'] ?? '';
+$database_password = $_ENV['DATABASE_PASSWORD'] ?? '';
+$database_name = $_ENV['DATABASE_NAME'] ?? '';
+$enc_key = $_ENV['ENCRYPT_KEY'] ?? '';
+
+$con = new mysqli($database_host, $database_user, $database_password, $database_name);
+
 // Decodificar el JSON a un array asociativo
 $data = json_decode(file_get_contents('php://input'), true);
 $data_string = json_encode($data);
 
 if (isset($data['cuerpo'])) {
-    $productos = $data['cuerpo']['Conceptos'];  // Acceder a 'Conceptos' dentro de 'cuerpo'
-    $cliente = $data['cuerpo']['Cliente'];      // Acceder a 'Cliente' dentro de 'cuerpo'
-    $emisor = $data['cuerpo']['Emisor'];
-    $token = $data['cuerpo']['Token'];
+    $moneda = $data['cuerpo']['Moneda'];
+    $cambio = $data['cuerpo']['tipoCambio'];
+    $productos = $data['cuerpo']['Conceptos'];
+    $receptor = $data['cuerpo']['Receptor'];
+    //$emisor = $data['cuerpo']['Emisor'];
+    //$token = $data['cuerpo']['Token'];
 } else {
     echo json_encode([
         'status' => 'error',
@@ -41,6 +52,61 @@ logToFile($username, $userID, 'Informacion recibida en gen_factura.php', "succes
 ///////////////////////////////////////////////////////////////////// INICIA ZONA DE CONSUTLAS Y CÁLCULOS
 
 $client = new \GuzzleHttp\Client();
+
+try {
+    $sql = "SELECT `id`, `token`, `creacion` FROM `token` ORDER BY `id` DESC LIMIT 1";
+
+    // Ejecutar la consulta (puedes usar tu conexión y método habitual)
+    $stmt = $con->prepare($sql);
+    $stmt->execute();
+    // Obtener el resultado
+    $result = $stmt->get_result();
+
+    if ($result && $row = $result->fetch_assoc()) {
+        $id = $row['id'];
+        $token = $row['token'];
+        $creacion = $row['creacion'];
+    } else {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'No se encontró ningún registro en la tabla token.',
+        ]);
+    }
+} catch (\Exception $e) {
+    echo json_encode([
+    'status' => 'error',
+    'message' => 'Ha ocurrido un error inesperado.',
+    'desc' => $e->getMessage(),
+    ]);
+    exit;
+}
+
+try {
+    $sql = "SELECT * FROM `cuenta_factura` ORDER BY `id` DESC LIMIT 1";
+
+    // Ejecutar la consulta (puedes usar tu conexión y método habitual)
+    $stmt = $con->prepare($sql);
+    $stmt->execute();
+    // Obtener el resultado
+    $result = $stmt->get_result();
+
+    if ($result && $row = $result->fetch_assoc()) {
+        $emisor = $row;
+        //print_r($emisor);
+    } else {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'No se encontró ningún registro en la tabla token.',
+        ]);
+    }
+} catch (\Exception $e) {
+    echo json_encode([
+    'status' => 'error',
+    'message' => 'Ha ocurrido un error inesperado.',
+    'desc' => $e->getMessage(),
+    ]);
+    exit;
+}
 
 if (empty($token)) {
     echo json_encode([
@@ -80,11 +146,17 @@ function ajustarTotalSiEsNecesario($totalReportado, $valorEsperado) {
 
 $conceptos = [];
 $subTotal = 0;
-$totalImp = 0;
+$totalImpuestoTrasladado = 0;
+$totalImpuestoRetenido = 0;
+$descuentos = 0;
 // Iterar sobre cada producto y formatearlo para el array Conceptos
 foreach($productos as $producto) {
+    $descuento = isset($producto['descuento']) ? $producto['descuento'] : 0;
+    $importe = bcmul($producto["cantidad"], $producto["precio"], 2);
+    //$importe = bcsub($importe, $descuento, 2);
+    $descuentos += $descuento;
+
     $impuestos = $producto["impuestos"];
-    $importe = number_format($producto["cantidad"] * $producto["precio"], 2, '.', '');
 
     $nodoImp = [];
     foreach($impuestos as $impuesto) {
@@ -99,7 +171,18 @@ foreach($productos as $producto) {
         ];
 
         $nodoImp[] = $prodImp;
-        $totalImp += $impuestoImporte;
+        if($impuesto['tipoImp'] == 1) {
+            $totalImpuestoTrasladado += $impuestoImporte;
+        } else if($impuesto['tipoImp'] == 2) {
+            $totalImpuestoRetenido += $impuestoImporte;
+        }
+    }
+
+    $informacionAduanera = [];
+    if(isset($producto['informacionAduanera']) && !is_null($producto['informacionAduanera'])) {
+        $numeroPedimento = $producto['informacionAduanera'][0]['numeroPedimento'];
+
+        $informacionAduanera[]['NumeroPedimento'] = $numeroPedimento;
     }
 
     $concepto = [
@@ -112,16 +195,23 @@ foreach($productos as $producto) {
         "Importe" => $importe,
         "ObjetoDeImpuesto" => $producto["objetoImp"],   //string
         "Impuestos" => $nodoImp,
+        "informacionAduanera" => !empty($informacionAduanera) ? $informacionAduanera : null,
     ];
 
+    if ($descuento != 0) {
+        $concepto["Descuento"] = number_format($descuento, 2, '.', '');
+    }
+
     $conceptos[] = $concepto;
-    $subTotal += $importe;
+    $subTotal += $producto["subTotal"];
 }
 
-$total = bcadd($subTotal, $totalImp, 2); // La multiplicación se realiza con 2 decimales de precisión
+$totalImp = bcsub($totalImpuestoTrasladado, $totalImpuestoRetenido, 2);
+$subT = bcsub($subTotal, $descuentos, 2);
+$total = bcadd($subT, $totalImp, 2); // La multiplicación se realiza con 2 decimales de precisión
 // Redondea el total a 2 decimales para asegurar la precisión
 $totalRedondeado = round((float)$total, 2);
-// Luego, si es necesario, conviértelo a float para el JSON
+// Se conviérte a float para el JSON
 $totalFloat = (float)$totalRedondeado;
 $totalReportado = $totalFloat;
 $valorEsperado = calcularValorEsperado($conceptos);
@@ -141,20 +231,33 @@ try {
     $razonSocialEmisor = $emisor["nombre"];
     $regimenFiscEmisor = $emisor["regimen"];
     $calleEmisor = $emisor["calle"];
-    $numExtEmisor = $emisor["numExt"];
-    $numIntEmisor = $emisor["numInt"];
+    $numExtEmisor = $emisor["num_ext"];
+    $numIntEmisor = $emisor["num_int"];
     $coloniaEmisor = $emisor["colonia"];
-    $localidadEmisor = $emisor["localidad"];
-    $municipioEmisor = $emisor["municpio"];
+    $localidadEmisor = $emisor["ciudad"];
+    $municipioEmisor = $emisor["municipio"];
     $estadoEmisor = $emisor["estado"];
     $cpEmisor = $emisor["cp"];
     $paisEmisor = $emisor["pais"];
 
+    $pass = $emisor["pass"];
+    $iv_base64 = $emisor["iv"];
+    $iv = base64_decode($iv_base64);
+    // Verificar si IV y pass no están vacíos
+    if ($iv === false || $pass === '') {
+        die("Error: IV o pass no válidos.");
+    }
+    // Descifrar la contraseña
+    $decryptedPassword = openssl_decrypt($pass, 'aes-256-cbc', $enc_key, 0, $iv);
+    if ($decryptedPassword === false) {
+        die("Error al descifrar la contraseña.");
+    }
+
     // Otros Datos
     $fechaExpedicion = date('Y-m-d\TH:i:s');
 
-    /*$CSD = "credenciales/certificado.cer";
-    $Key = "credenciales/key.key";
+    $CSD = $emisor["certificado"];
+    $Key = $emisor["llave"];
 
     // Verificar si los archivos existen
     if (!file_exists($CSD)) {
@@ -173,22 +276,19 @@ try {
         $KeyBase64 = base64_encode($KeyBinario);
     } catch (Exception $e) {
         die("Error al leer los archivos: " . $e->getMessage());
-    }*/
+    }
     
     /*
-    "CSD" => "MIIFsDCCA5igAwIBAgIUMzAwMDEwMDAwMDA1MDAwMDM0MTYwDQYJKoZIhvcNAQELBQAwggErMQ8wDQYDVQQDDAZBQyBVQVQxLjAsBgNVBAoMJVNFUlZJQ0lPIERFIEFETUlOSVNUUkFDSU9OIFRSSUJVVEFSSUExGjAYBgNVBAsMEVNBVC1JRVMgQXV0aG9yaXR5MSgwJgYJKoZIhvcNAQkBFhlvc2Nhci5tYXJ0aW5lekBzYXQuZ29iLm14MR0wGwYDVQQJDBQzcmEgY2VycmFkYSBkZSBjYWxpejEOMAwGA1UEEQwFMDYzNzAxCzAJBgNVBAYTAk1YMRkwFwYDVQQIDBBDSVVEQUQgREUgTUVYSUNPMREwDwYDVQQHDAhDT1lPQUNBTjERMA8GA1UELRMIMi41LjQuNDUxJTAjBgkqhkiG9w0BCQITFnJlc3BvbnNhYmxlOiBBQ0RNQS1TQVQwHhcNMjMwNTE4MTE0MzUxWhcNMjcwNTE4MTE0MzUxWjCB1zEnMCUGA1UEAxMeRVNDVUVMQSBLRU1QRVIgVVJHQVRFIFNBIERFIENWMScwJQYDVQQpEx5FU0NVRUxBIEtFTVBFUiBVUkdBVEUgU0EgREUgQ1YxJzAlBgNVBAoTHkVTQ1VFTEEgS0VNUEVSIFVSR0FURSBTQSBERSBDVjElMCMGA1UELRMcRUtVOTAwMzE3M0M5IC8gVkFEQTgwMDkyN0RKMzEeMBwGA1UEBRMVIC8gVkFEQTgwMDkyN0hTUlNSTDA1MRMwEQYDVQQLEwpTdWN1cnNhbCAxMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtmecO6n2GS0zL025gbHGQVxznPDICoXzR2uUngz4DqxVUC/w9cE6FxSiXm2ap8Gcjg7wmcZfm85EBaxCx/0J2u5CqnhzIoGCdhBPuhWQnIh5TLgj/X6uNquwZkKChbNe9aeFirU/JbyN7Egia9oKH9KZUsodiM/pWAH00PCtoKJ9OBcSHMq8Rqa3KKoBcfkg1ZrgueffwRLws9yOcRWLb02sDOPzGIm/jEFicVYt2Hw1qdRE5xmTZ7AGG0UHs+unkGjpCVeJ+BEBn0JPLWVvDKHZAQMj6s5Bku35+d/MyATkpOPsGT/VTnsouxekDfikJD1f7A1ZpJbqDpkJnss3vQIDAQABox0wGzAMBgNVHRMBAf8EAjAAMAsGA1UdDwQEAwIGwDANBgkqhkiG9w0BAQsFAAOCAgEAFaUgj5PqgvJigNMgtrdXZnbPfVBbukAbW4OGnUhNrA7SRAAfv2BSGk16PI0nBOr7qF2mItmBnjgEwk+DTv8Zr7w5qp7vleC6dIsZFNJoa6ZndrE/f7KO1CYruLXr5gwEkIyGfJ9NwyIagvHHMszzyHiSZIA850fWtbqtythpAliJ2jF35M5pNS+YTkRB+T6L/c6m00ymN3q9lT1rB03YywxrLreRSFZOSrbwWfg34EJbHfbFXpCSVYdJRfiVdvHnewN0r5fUlPtR9stQHyuqewzdkyb5jTTw02D2cUfL57vlPStBj7SEi3uOWvLrsiDnnCIxRMYJ2UA2ktDKHk+zWnsDmaeleSzonv2CHW42yXYPCvWi88oE1DJNYLNkIjua7MxAnkNZbScNw01A6zbLsZ3y8G6eEYnxSTRfwjd8EP4kdiHNJftm7Z4iRU7HOVh79/lRWB+gd171s3d/mI9kte3MRy6V8MMEMCAnMboGpaooYwgAmwclI2XZCczNWXfhaWe0ZS5PmytD/GDpXzkX0oEgY9K/uYo5V77NdZbGAjmyi8cE2B2ogvyaN2XfIInrZPgEffJ4AB7kFA2mwesdLOCh0BLD9itmCve3A1FGR4+stO2ANUoiI3w3Tv2yQSg4bjeDlJ08lXaaFCLW2peEXMXjQUk7fmpb5MNuOUTW6BE=",
-    "LlavePrivada" => "MIIFDjBABgkqhkiG9w0BBQ0wMzAbBgkqhkiG9w0BBQwwDgQIAgEAAoIBAQACAggAMBQGCCqGSIb3DQMHBAgwggS/AgEAMASCBMh4EHl7aNSCaMDA1VlRoXCZ5UUmqErAbucoZQObOaLUEm+I+QZ7Y8Giupo+F1XWkLvAsdk/uZlJcTfKLJyJbJwsQYbSpLOCLataZ4O5MVnnmMbfG//NKJn9kSMvJQZhSwAwoGLYDm1ESGezrvZabgFJnoQv8Si1nAhVGTk9FkFBesxRzq07dmZYwFCnFSX4xt2fDHs1PMpQbeq83aL/PzLCce3kxbYSB5kQlzGtUYayiYXcu0cVRu228VwBLCD+2wTDDoCmRXtPesgrLKUR4WWWb5N2AqAU1mNDC+UEYsENAerOFXWnmwrcTAu5qyZ7GsBMTpipW4Dbou2yqQ0lpA/aB06n1kz1aL6mNqGPaJ+OqoFuc8Ugdhadd+MmjHfFzoI20SZ3b2geCsUMNCsAd6oXMsZdWm8lzjqCGWHFeol0ik/xHMQvuQkkeCsQ28PBxdnUgf7ZGer+TN+2ZLd2kvTBOk6pIVgy5yC6cZ+o1Tloql9hYGa6rT3xcMbXlW+9e5jM2MWXZliVW3ZhaPjptJFDbIfWxJPjz4QvKyJk0zok4muv13Iiwj2bCyefUTRz6psqI4cGaYm9JpscKO2RCJN8UluYGbbWmYQU+Int6LtZj/lv8p6xnVjWxYI+rBPdtkpfFYRp+MJiXjgPw5B6UGuoruv7+vHjOLHOotRo+RdjZt7NqL9dAJnl1Qb2jfW6+d7NYQSI/bAwxO0sk4taQIT6Gsu/8kfZOPC2xk9rphGqCSS/4q3Os0MMjA1bcJLyoWLp13pqhK6bmiiHw0BBXH4fbEp4xjSbpPx4tHXzbdn8oDsHKZkWh3pPC2J/nVl0k/yF1KDVowVtMDXE47k6TGVcBoqe8PDXCG9+vjRpzIidqNo5qebaUZu6riWMWzldz8x3Z/jLWXuDiM7/Yscn0Z2GIlfoeyz+GwP2eTdOw9EUedHjEQuJY32bq8LICimJ4Ht+zMJKUyhwVQyAER8byzQBwTYmYP5U0wdsyIFitphw+/IH8+v08Ia1iBLPQAeAvRfTTIFLCs8foyUrj5Zv2B/wTYIZy6ioUM+qADeXyo45uBLLqkN90Rf6kiTqDld78NxwsfyR5MxtJLVDFkmf2IMMJHTqSfhbi+7QJaC11OOUJTD0v9wo0X/oO5GvZhe0ZaGHnm9zqTopALuFEAxcaQlc4R81wjC4wrIrqWnbcl2dxiBtD73KW+wcC9ymsLf4I8BEmiN25lx/OUc1IHNyXZJYSFkEfaxCEZWKcnbiyf5sqFSSlEqZLc4lUPJFAoP6s1FHVcyO0odWqdadhRZLZC9RCzQgPlMRtji/OXy5phh7diOBZv5UYp5nb+MZ2NAB/eFXm2JLguxjvEstuvTDmZDUb6Uqv++RdhO5gvKf/AcwU38ifaHQ9uvRuDocYwVxZS2nr9rOwZ8nAh+P2o4e0tEXjxFKQGhxXYkn75H3hhfnFYjik/2qunHBBZfcdG148MaNP6DjX33M238T9Zw/GyGx00JMogr2pdP4JAErv9a5yt4YR41KGf8guSOUbOXVARw6+ybh7+meb7w4BeTlj3aZkv8tVGdfIt3lrwVnlbzhLjeQY6PplKp3/a5Kr5yM0T4wJoKQQ6v3vSNmrhpbuAtKxpMILe8CQoo=",
-    "CSDPassword" => "12345678a",
-    * 
     "CSD" => $CSDBase64,
     "LlavePrivada" => $KeyBase64,
     "CSDPassword" => "",*/
+
     $data = [
         "DatosGenerales" => [
             "Version" => "4.0",
-            "CSD" => "MIIFsDCCA5igAwIBAgIUMzAwMDEwMDAwMDA1MDAwMDM0MTYwDQYJKoZIhvcNAQELBQAwggErMQ8wDQYDVQQDDAZBQyBVQVQxLjAsBgNVBAoMJVNFUlZJQ0lPIERFIEFETUlOSVNUUkFDSU9OIFRSSUJVVEFSSUExGjAYBgNVBAsMEVNBVC1JRVMgQXV0aG9yaXR5MSgwJgYJKoZIhvcNAQkBFhlvc2Nhci5tYXJ0aW5lekBzYXQuZ29iLm14MR0wGwYDVQQJDBQzcmEgY2VycmFkYSBkZSBjYWxpejEOMAwGA1UEEQwFMDYzNzAxCzAJBgNVBAYTAk1YMRkwFwYDVQQIDBBDSVVEQUQgREUgTUVYSUNPMREwDwYDVQQHDAhDT1lPQUNBTjERMA8GA1UELRMIMi41LjQuNDUxJTAjBgkqhkiG9w0BCQITFnJlc3BvbnNhYmxlOiBBQ0RNQS1TQVQwHhcNMjMwNTE4MTE0MzUxWhcNMjcwNTE4MTE0MzUxWjCB1zEnMCUGA1UEAxMeRVNDVUVMQSBLRU1QRVIgVVJHQVRFIFNBIERFIENWMScwJQYDVQQpEx5FU0NVRUxBIEtFTVBFUiBVUkdBVEUgU0EgREUgQ1YxJzAlBgNVBAoTHkVTQ1VFTEEgS0VNUEVSIFVSR0FURSBTQSBERSBDVjElMCMGA1UELRMcRUtVOTAwMzE3M0M5IC8gVkFEQTgwMDkyN0RKMzEeMBwGA1UEBRMVIC8gVkFEQTgwMDkyN0hTUlNSTDA1MRMwEQYDVQQLEwpTdWN1cnNhbCAxMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtmecO6n2GS0zL025gbHGQVxznPDICoXzR2uUngz4DqxVUC/w9cE6FxSiXm2ap8Gcjg7wmcZfm85EBaxCx/0J2u5CqnhzIoGCdhBPuhWQnIh5TLgj/X6uNquwZkKChbNe9aeFirU/JbyN7Egia9oKH9KZUsodiM/pWAH00PCtoKJ9OBcSHMq8Rqa3KKoBcfkg1ZrgueffwRLws9yOcRWLb02sDOPzGIm/jEFicVYt2Hw1qdRE5xmTZ7AGG0UHs+unkGjpCVeJ+BEBn0JPLWVvDKHZAQMj6s5Bku35+d/MyATkpOPsGT/VTnsouxekDfikJD1f7A1ZpJbqDpkJnss3vQIDAQABox0wGzAMBgNVHRMBAf8EAjAAMAsGA1UdDwQEAwIGwDANBgkqhkiG9w0BAQsFAAOCAgEAFaUgj5PqgvJigNMgtrdXZnbPfVBbukAbW4OGnUhNrA7SRAAfv2BSGk16PI0nBOr7qF2mItmBnjgEwk+DTv8Zr7w5qp7vleC6dIsZFNJoa6ZndrE/f7KO1CYruLXr5gwEkIyGfJ9NwyIagvHHMszzyHiSZIA850fWtbqtythpAliJ2jF35M5pNS+YTkRB+T6L/c6m00ymN3q9lT1rB03YywxrLreRSFZOSrbwWfg34EJbHfbFXpCSVYdJRfiVdvHnewN0r5fUlPtR9stQHyuqewzdkyb5jTTw02D2cUfL57vlPStBj7SEi3uOWvLrsiDnnCIxRMYJ2UA2ktDKHk+zWnsDmaeleSzonv2CHW42yXYPCvWi88oE1DJNYLNkIjua7MxAnkNZbScNw01A6zbLsZ3y8G6eEYnxSTRfwjd8EP4kdiHNJftm7Z4iRU7HOVh79/lRWB+gd171s3d/mI9kte3MRy6V8MMEMCAnMboGpaooYwgAmwclI2XZCczNWXfhaWe0ZS5PmytD/GDpXzkX0oEgY9K/uYo5V77NdZbGAjmyi8cE2B2ogvyaN2XfIInrZPgEffJ4AB7kFA2mwesdLOCh0BLD9itmCve3A1FGR4+stO2ANUoiI3w3Tv2yQSg4bjeDlJ08lXaaFCLW2peEXMXjQUk7fmpb5MNuOUTW6BE=",
-            "LlavePrivada" => "MIIFDjBABgkqhkiG9w0BBQ0wMzAbBgkqhkiG9w0BBQwwDgQIAgEAAoIBAQACAggAMBQGCCqGSIb3DQMHBAgwggS/AgEAMASCBMh4EHl7aNSCaMDA1VlRoXCZ5UUmqErAbucoZQObOaLUEm+I+QZ7Y8Giupo+F1XWkLvAsdk/uZlJcTfKLJyJbJwsQYbSpLOCLataZ4O5MVnnmMbfG//NKJn9kSMvJQZhSwAwoGLYDm1ESGezrvZabgFJnoQv8Si1nAhVGTk9FkFBesxRzq07dmZYwFCnFSX4xt2fDHs1PMpQbeq83aL/PzLCce3kxbYSB5kQlzGtUYayiYXcu0cVRu228VwBLCD+2wTDDoCmRXtPesgrLKUR4WWWb5N2AqAU1mNDC+UEYsENAerOFXWnmwrcTAu5qyZ7GsBMTpipW4Dbou2yqQ0lpA/aB06n1kz1aL6mNqGPaJ+OqoFuc8Ugdhadd+MmjHfFzoI20SZ3b2geCsUMNCsAd6oXMsZdWm8lzjqCGWHFeol0ik/xHMQvuQkkeCsQ28PBxdnUgf7ZGer+TN+2ZLd2kvTBOk6pIVgy5yC6cZ+o1Tloql9hYGa6rT3xcMbXlW+9e5jM2MWXZliVW3ZhaPjptJFDbIfWxJPjz4QvKyJk0zok4muv13Iiwj2bCyefUTRz6psqI4cGaYm9JpscKO2RCJN8UluYGbbWmYQU+Int6LtZj/lv8p6xnVjWxYI+rBPdtkpfFYRp+MJiXjgPw5B6UGuoruv7+vHjOLHOotRo+RdjZt7NqL9dAJnl1Qb2jfW6+d7NYQSI/bAwxO0sk4taQIT6Gsu/8kfZOPC2xk9rphGqCSS/4q3Os0MMjA1bcJLyoWLp13pqhK6bmiiHw0BBXH4fbEp4xjSbpPx4tHXzbdn8oDsHKZkWh3pPC2J/nVl0k/yF1KDVowVtMDXE47k6TGVcBoqe8PDXCG9+vjRpzIidqNo5qebaUZu6riWMWzldz8x3Z/jLWXuDiM7/Yscn0Z2GIlfoeyz+GwP2eTdOw9EUedHjEQuJY32bq8LICimJ4Ht+zMJKUyhwVQyAER8byzQBwTYmYP5U0wdsyIFitphw+/IH8+v08Ia1iBLPQAeAvRfTTIFLCs8foyUrj5Zv2B/wTYIZy6ioUM+qADeXyo45uBLLqkN90Rf6kiTqDld78NxwsfyR5MxtJLVDFkmf2IMMJHTqSfhbi+7QJaC11OOUJTD0v9wo0X/oO5GvZhe0ZaGHnm9zqTopALuFEAxcaQlc4R81wjC4wrIrqWnbcl2dxiBtD73KW+wcC9ymsLf4I8BEmiN25lx/OUc1IHNyXZJYSFkEfaxCEZWKcnbiyf5sqFSSlEqZLc4lUPJFAoP6s1FHVcyO0odWqdadhRZLZC9RCzQgPlMRtji/OXy5phh7diOBZv5UYp5nb+MZ2NAB/eFXm2JLguxjvEstuvTDmZDUb6Uqv++RdhO5gvKf/AcwU38ifaHQ9uvRuDocYwVxZS2nr9rOwZ8nAh+P2o4e0tEXjxFKQGhxXYkn75H3hhfnFYjik/2qunHBBZfcdG148MaNP6DjX33M238T9Zw/GyGx00JMogr2pdP4JAErv9a5yt4YR41KGf8guSOUbOXVARw6+ybh7+meb7w4BeTlj3aZkv8tVGdfIt3lrwVnlbzhLjeQY6PplKp3/a5Kr5yM0T4wJoKQQ6v3vSNmrhpbuAtKxpMILe8CQoo=",
-            "CSDPassword" => "12345678a",
+            "CSD" => $CSDBase64,
+            "LlavePrivada" => $KeyBase64,
+            "CSDPassword" => $decryptedPassword,
             "GeneraPDF" => false,
             "CFDI" => "Factura",
             "OpcionDecimales" => 2,
@@ -196,7 +296,7 @@ try {
             "TipoCFDI" => "Ingreso",
             "EnviaEmail" => false,
             "ReceptorEmail" => "sergioedurdo21@gmail.com",
-            "EmailMensaje" => "Factura de Smart Building Solutions",
+            "EmailMensaje" => "Factura de ISI Import",
             "noUsarPlantillaHtml" => "true",
         ],
         "Encabezado" => [
@@ -219,27 +319,27 @@ try {
             ]
             ],
             "Receptor" => [
-            "RFC" => $cliente['rfc'],
-            "NombreRazonSocial" => $cliente['nombre'],
-            "UsoCFDI" => $cliente['cfdi'],
-            "RegimenFiscal" => $cliente['regimen'],
+            "RFC" => $receptor['rfc'],
+            "NombreRazonSocial" => $receptor['nombre'],
+            "UsoCFDI" => $receptor['cfdi'],
+            "RegimenFiscal" => $receptor['regimen'],
             "Direccion" => [            
-                "Calle" => $cliente['calle'],
-                "NumeroExterior" => $cliente['numExt'],
-                "NumeroInterior" => $cliente['numInt'],
-                "Colonia" => $cliente['colonia'],
-                "Localidad" => $cliente['ciudad'],
-                "Municipio" => $cliente['municipio'],
-                "Estado" => $cliente['estado'],
-                "Pais" => $cliente['pais'],
-                "CodigoPostal" => $cliente['cp']
+                "Calle" => $receptor['calle'],
+                "NumeroExterior" => $receptor['numext'],
+                "NumeroInterior" => $receptor['numint'],
+                "Colonia" => $receptor['colonia'],
+                "Localidad" => $receptor['ciudad'],
+                "Municipio" => $receptor['municipio'],
+                "Estado" => $receptor['estado'],
+                "Pais" => $receptor['pais'],
+                "CodigoPostal" => $receptor['cp']
             ]
             ],
             "Fecha" => $fechaExpedicion,
             "Serie" => "AB",
-            "MetodoPago" => $cliente['metodoP'],
-            "FormaPago" => $cliente['formaP'],
-            "Moneda" => "MXN",
+            "MetodoPago" => $receptor['metodoP'],
+            "FormaPago" => $receptor['formaP'],
+            "Moneda" => $moneda,
             "LugarExpedicion" => $cpEmisor,
             "SubTotal" => $subTotal,
             "Total" => $totalAjustado,
@@ -250,6 +350,10 @@ try {
         ],
         "Conceptos" => $conceptos,
     ];
+
+    if($moneda !== 'MXN') {
+        $data['Encabezado']['TipoCambio'] = $cambio;
+    }
     //var_dump($data);
     //print_r($data);
     $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
@@ -325,7 +429,7 @@ try {
             $folio = $data['Folio'];
             $sello = $data['Sello'];
 
-            if($cliente['metodoP'] == 'PPD') {
+            if($receptor['metodoP'] == 'PPD') {
                 $saldoInsoluto = $totalAjustado;
             } else {
                 $saldoInsoluto = '0.00';
@@ -342,13 +446,30 @@ try {
             $fechaActual = date('Y-m-d H:i:s');
 
             // Vincular parámetros y ejecutar
-            $stmt->bind_param("isssssssssssssssss", $status, $totalAjustado, $cliente['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $cliente['metodoP'], $cliente['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto);
+            $stmt->bind_param("isssssssssssssssss", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
             }
 
             // Obtener el ID de la última inserción
             $idFactura = $con->insert_id;
+
+            $stmt->close();
+
+            logToFile($username, $userID, 'Inserción de la factura a la bd', "success");
+
+            $sqlSello = "UPDATE `timbres` SET `restantes`=`restantes` - 1,`fecha_update`= ? WHERE 1 ORDER BY `id` DESC LIMIT 1";
+            $stmt = $con->prepare($sqlSello);
+            if ($stmt === false) {
+                throw new Exception("Error en la preparación de la consulta: " . $con->error);
+            }
+            $fechaActual = date('Y-m-d H:i:s');
+
+            // Vincular parámetros y ejecutar
+            $stmt->bind_param("s", $fechaActual);
+            if (!$stmt->execute()) {
+                throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
+            }
 
             $stmt->close();
 
@@ -383,7 +504,8 @@ try {
 } catch (Exception $e) {
     echo json_encode([
         'status' => 'error',
-        'message' => 'Error en la solicitud de la factura: ' . $e->getMessage()
+        'message' => 'Error en la solicitud de la factura: ' . $e->getMessage(),
+        'data' => $data,
     ]);
     logToFile($username, $userID, 'Error en la solicitud de la factura: '.$e->getMessage(), "error", $e->getMessage());
     exit;

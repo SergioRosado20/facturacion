@@ -2,28 +2,42 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-
 header('Content-Type: application/json');
-require '../.env';
 
+require_once 'vendor/autoload.php';
 require_once "cors.php";
 cors();
 
-$con = new mysqli(DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME);
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv->load();
+
+$database_host = $_ENV['DATABASE_HOST'] ?? '';
+$database_user = $_ENV['DATABASE_USER'] ?? '';
+$database_password = $_ENV['DATABASE_PASSWORD'] ?? '';
+$database_name = $_ENV['DATABASE_NAME'] ?? '';
+
+$con = new mysqli($database_host, $database_user, $database_password, $database_name);
 
 if($con->connect_error) {
     die("Coneccion fallida: " . $con->connect_error);
 }
 
-$id = isset($_POST["id"]) ? $_POST["id"] : null;
-$data = isset($_POST['data']) ? $_POST['data'] : null;
-$cant = isset($_POST['cant']) ? intval($_POST['cant']) : 10;
-$page = isset($_POST['page']) ? intval($_POST['page']) : 1;
-$canceladas = isset($_POST['canceladas']) ? $_POST['canceladas'] : null;
+$json = file_get_contents('php://input');
+$data = json_decode($json, true);
+
+$id = isset($data["id"]) ? $data["id"] : null;
+$data_inner = isset($data['data']) ? $data['data'] : null; // Cambié la variable a $data_inner para evitar la sobrescritura
+$cant = isset($data['cant']) ? intval($data['cant']) : 10;
+$page = isset($data['page']) ? intval($data['page']) : 1;
+$canceladas = isset($data['canceladas']) ? filter_var($data['canceladas'], FILTER_VALIDATE_BOOLEAN) : null; // Usa filter_var para asegurar que sea booleano
+$ppd = isset($data['ppd']) ? filter_var($data['ppd'], FILTER_VALIDATE_BOOLEAN) : null; // Usa filter_var para asegurar que sea booleano
+//print_r('Canceladas: '.$canceladas);
+//print_r('cant: '.$cant);
 
 $offset = ($page - 1) * $cant;
-
-$whereClause = $canceladas ? "status != 1" : "1";
+$whereClause = '';
+$whereClause .= $canceladas ? " status != 1" : " 1";
+$whereClause .= $ppd ? " AND metodoPago = 'PPD'" : null;
 
 $sql_count = "SELECT COUNT(*) as total FROM facturas WHERE $whereClause";
 $stmt_count = $con->prepare($sql_count);
@@ -37,20 +51,22 @@ $row = $resultado_count->fetch_assoc();
 
 $total_registros = $row['total'];
 
-$sql = "SELECT facturas.*, facturas.pedidos, facturas.id as fac_id, facturas.cliente as fac_cliente,
+$sql = "SELECT facturas.*, facturas.pedidos, facturas.id as fac_id, facturas.cliente as fac_cliente, cancelaciones.id as cancel_id, cancelaciones.esCancelable, cancelaciones.estado, cancelaciones.estatusCancelacion, cancelaciones.fecha_creacion as fecha_cancelacion,
             COALESCE(company.name, 'Factura de mantenimiento') AS nombre,
             company.id as client_id
         FROM facturas 
         LEFT JOIN company ON facturas.cliente = company.id
+        LEFT JOIN cancelaciones ON facturas.id = cancelaciones.folio
         WHERE $whereClause";
 if($id !== null) {
     $sql .= " AND facturas.id = '". $con->real_escape_string($id) ."'";
 }
-if ($data !== null) {
-    $sql .= ' AND (facturas.id LIKE "%' . $con->real_escape_string($data) . '%" OR facturas.pedidos LIKE "%' . $con->real_escape_string($data) . '%" OR company.name LIKE "%' . $con->real_escape_string($data) . '%")';
+if ($data_inner !== null) {
+    $sql .= ' AND (facturas.id LIKE "%' . $con->real_escape_string($data_inner) . '%" OR facturas.pedidos LIKE "%' . $con->real_escape_string($data_inner) . '%" OR company.name LIKE "%' . $con->real_escape_string($data_inner) . '%")';
 }
-$sql .= " ORDER BY facturas.id ASC
-        LIMIT ? OFFSET ?";
+
+$order = $canceladas ? " ORDER BY cancelaciones.id ASC LIMIT ? OFFSET ?" : " ORDER BY facturas.id ASC LIMIT ? OFFSET ?";
+$sql .= $order;
 
 // Preparar la consulta para evitar inyecciones SQL
 $stmt = $con->prepare($sql);
@@ -109,7 +125,9 @@ echo json_encode([
     'total_registros' => $total_registros,
     'total_pages' => $totalPages,
     'rows' => $resultado->num_rows,
-    'data' => $facturas
+    'data' => $facturas,
+    //'sql' => $sql,
+    'canceladas' => $canceladas,
 ]);
 
 $con->close();

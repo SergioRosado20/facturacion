@@ -10,6 +10,16 @@ require_once "cors.php";
 cors();
 
 date_default_timezone_set('America/Mexico_City');
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv->load();
+
+$database_host = $_ENV['DATABASE_HOST'] ?? '';
+$database_user = $_ENV['DATABASE_USER'] ?? '';
+$database_password = $_ENV['DATABASE_PASSWORD'] ?? '';
+$database_name = $_ENV['DATABASE_NAME'] ?? '';
+
+$con = new mysqli($database_host, $database_user, $database_password, $database_name);
+date_default_timezone_set('America/Mexico_City');
 
 $usuario = 'PruebasTimbrado';
 $password = '@Notiene1';
@@ -44,7 +54,6 @@ try {
   $tokenData = json_decode($responseToken->getBody()->getContents(), true);
   $token = $tokenData['token'] ?? '';
 
-  $con = new mysqli(DB_SERVER, DB_USER, DB_PASSWORD, DB_NAME);
   $sql = "INSERT INTO `token`(`token`, `creacion`) VALUES (?,NOW())";
   $stmt = $con->prepare($sql);
   if ($stmt === false) {

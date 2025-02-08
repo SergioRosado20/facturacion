@@ -183,7 +183,8 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
         } else {
             // Registro del comprobante (atributos principales)
             $impuesto = $xml->xpath('//cfdi:Impuestos[@TotalImpuestosTrasladados]');
-            $totalImpuestos = (string) $impuesto[0]['TotalImpuestosTrasladados'];
+            $totalImpuestosTrasladados = (string) $impuesto[0]['TotalImpuestosTrasladados'];
+            $totalImpuestosRetenidos = (string) $impuesto[0]['TotalImpuestosRetenidos'];
 
             //print_r($totalImpuestos);
             $factura = [
@@ -193,12 +194,14 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
                 'Fecha' => (string) $xml['Fecha'],
                 'FormaPago' => (string) $xml['FormaPago'],
                 'SubTotal' => (string) $xml['SubTotal'],
-                'TotalImpuestos' => (string) $totalImpuestos,
+                'TotalImpuestosTrasladados' => (string) $totalImpuestosTrasladados,
+                'TotalImpuestosRetenidos' => (string) $totalImpuestosRetenidos,
                 'Total' => (string) $xml['Total'],
                 'MetodoPago' => (string) $xml['MetodoPago'],
                 'LugarExpedicion' => (string) $xml['LugarExpedicion'],
                 'TipoDeComprobante' => (string) $xml['TipoDeComprobante'],
                 'Moneda' => (string) $xml['Moneda'],
+                'TipoCambio' => (string) $xml['TipoCambio'],
                 'Sello' => (string) $xml['Sello']
             ];
 
@@ -230,11 +233,18 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
             $factura['Conceptos'] = [];
             $conceptos = $xml->xpath('//cfdi:Conceptos/cfdi:Concepto');            
             foreach ($conceptos as $concepto) {
-                $impuestos = $concepto->xpath('./cfdi:Impuestos/cfdi:Traslados/cfdi:Traslado');
+                $impuestosTrasladados = $concepto->xpath('./cfdi:Impuestos/cfdi:Traslados/cfdi:Traslado');
 
-                $prodImpuesto = 0;
-                foreach($impuestos as $impuesto) {
-                    $prodImpuesto += $impuesto['Importe'];
+                $prodImpuestoTrasladado = 0.00;
+                foreach($impuestosTrasladados as $impuestoTrasladado) {
+                    $prodImpuestoTrasladado += $impuestoTrasladado['Importe'];
+                };
+
+                $impuestosRetenidos = $concepto->xpath('./cfdi:Impuestos/cfdi:Retenciones/cfdi:Retencion');
+
+                $prodImpuestoRetenido = 0.00;
+                foreach($impuestosRetenidos as $impuestoRetenido) {
+                    $prodImpuestoRetenido += $impuestoRetenido['Importe'];
                 };
 
                 $factura['Conceptos'][] = [
@@ -243,12 +253,14 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
                     'ClaveUnidad' => (string) $concepto['ClaveUnidad'],
                     'Descripcion' => (string) $concepto['Descripcion'],
                     'ValorUnitario' => (string) $concepto['ValorUnitario'],
+                    'Descuento' => (string) $concepto['Descuento'],
                     'Importe' => (string) $concepto['Importe'],
                     'Base' => (string) $impuestos[0]['Base'],
                     'Impuesto' => (string) $impuestos[0]['Impuesto'],
                     'TipoFactor' => (string) $impuestos[0]['TipoFactor'],
                     'TasaOCuota' => (string) $impuestos[0]['TasaOCuota'],
-                    'ImporteImpuesto' => (string) $prodImpuesto,
+                    'ImporteImpuestoTrasladado' => (string) $prodImpuestoTrasladado,
+                    'ImporteImpuestoRetenido' => (string) $prodImpuestoRetenido,
                 ];
             }
             //print_r($factura);
@@ -311,7 +323,7 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
 
 function generarPDF($array, $id) {
     ob_start();
-    //print_r($array);
+    //print_r($id);
     class PDF extends FPDF {
         // Encabezado
         function Header() {
@@ -347,7 +359,7 @@ function generarPDF($array, $id) {
         // Tabla
         function FacturaTable($header, $data) {
             // Definir los anchos de las columnas
-            $widths = array(15, 15, 23, 30, 35, 20, 15, 17, 19); // Ajusta los valores de ancho según las necesidades
+            $widths = array(15, 18, 25, 35, 16, 15, 22, 22, 22); // Ajusta los valores de ancho según las necesidades
             
             // Cabecera
             $this->SetFont('Arial', 'B', 7);
@@ -758,25 +770,32 @@ function generarPDF($array, $id) {
         return $cfdi;
     }
     // Datos de ejemplo
-    $header = array('Cantidad', 'Codigo', 'Clave Unidad SAT', 'Clave Prod/Servicio', 'Descripcion', 'Valor unitario', 'Descuento', 'Impuestos', 'Importe');
+    $header = array('Cantidad', 'Clave Uni SAT', 'Clave Prod/Servicio', 'Descripcion', 'Valor uni', 'Descuento', 'Imp Trasladados', 'Imp Retenidos', 'Importe');
     
     $data = [];
 
+    $descuentos = 0;
     // Bucle para llenar el array data con los conceptos
     foreach ($array['Conceptos'] as $concepto) {
         $cantidad = $concepto['Cantidad'];
-        $codigo = '';
-        $importeImpuesto = $concepto['ImporteImpuesto'];
         $claveUnidad = $concepto['ClaveUnidad'];
         $claveProdServ = $concepto['ClaveProdServ'];
         $descripcion = $concepto['Descripcion'];
-        $valorUnitario = '$' . number_format($concepto['ValorUnitario'], 2); // Formato de precio
-        $descuento = '$0.00'; // No hay descuento en los conceptos proporcionados
-        $impuestos = '$' . number_format($importeImpuesto, 2); // Impuesto formateado
+        $valorUnitario = '$' . number_format((float)($concepto['ValorUnitario'] ?? 0), 2); // Asigna 0 si no está definido
+        if(isset($concepto['Descuento'])) {
+            $descuento = (float)$concepto['Descuento'];
+            $descuento = '$' . number_format($descuento, 2); // No hay descuento en los conceptos proporcionados
+        } else {
+            $descuento = 0.00;
+        }
+        $descuentos = $descuentos + floatval($concepto['Descuento']);
+        $impuestoValor = isset($concepto['Impuesto']) && $concepto['Impuesto'] != 0 ? $concepto['Impuesto'] : (isset($concepto['ImporteImpuestoTrasladado']) ? $concepto['ImporteImpuestoTrasladado'] : 0);
+        $impuestosTrasladados = '$' . number_format((float)$impuestoValor, 2); // Impuesto formateado
+        $impuestosRetenidos = '$' . number_format($concepto['ImporteImpuestoRetenido'], 2); // Impuesto formateado
         $importe = '$' . number_format($concepto['Importe'], 2); // Importe formateado
 
         // Agregar los datos del concepto al array data
-        $data[] = [$cantidad, $codigo, $claveUnidad, $claveProdServ, $descripcion, $valorUnitario, $descuento, $impuestos, $importe];
+        $data[] = [$cantidad, $claveUnidad, $claveProdServ, $descripcion, $valorUnitario, $descuento, $impuestosTrasladados, $impuestosRetenidos, $importe];
     }
 
     function numeroALetras($numero) {
@@ -880,7 +899,7 @@ function generarPDF($array, $id) {
     $result = $writer->write($qrCode);
     $result->saveToFile($qrFilePath); // Guarda el archivo QR
 
-    echo "Código QR generado y guardado en: $qrFilePath";
+    //echo "Código QR generado y guardado en: $qrFilePath";
     
     // Crear PDF
     $pdf = new PDF();
@@ -893,17 +912,17 @@ function generarPDF($array, $id) {
     $pdf->SetXY(100,25);
     $pdf->Cell(100,10,'Serie: CFDIC',0,1, 'C');
     $pdf->SetXY(100,30);
-    $pdf->Cell(100,10,'Folio: '.$array['Folio'],0,1, 'C');
+    $pdf->Cell(100,10,'Folio: '.$id,0,1, 'C');
     $pdf->SetXY(100,35);
     $pdf->Cell(100,10,'Fecha: '.$fechaFinal,0,1, 'C');
     $pdf->SetXY(100,40);
-    $pdf->Cell(100,10,'Lugar de Expedicion (CP): 44350',0,1, 'C');
+    $pdf->Cell(100,10,'Lugar de Expedicion (CP): '.$array['LugarExpedicion'],0,1, 'C');
     $pdf->SetXY(100,45);
     $pdf->Cell(100,10,'Metodo de Pago: '.safe_sutf8_decode($metodoPago),0,1, 'C');
     $pdf->SetXY(100,50);
     $pdf->Cell(100,10,'Forma de Pago: '.safe_sutf8_decode($formaPago),0,1, 'C');
     $pdf->SetXY(100,55);
-    $pdf->Cell(100,10,'Moneda: MXN - Peso Mexicano',0,1, 'C');
+    $pdf->Cell(100,10,'Moneda: '.safe_sutf8_decode($array['Moneda']),0,1, 'C');
     $pdf->Ln(10);
 
     // Información Emisor
@@ -933,7 +952,7 @@ function generarPDF($array, $id) {
     $pdf->SetXY(10,85);
     $pdf->Cell(0,10,'Uso CFDI: '.safe_sutf8_decode(cfdi($Receptor['UsoCFDI'])),0,1);
     $pdf->SetXY(10,90);
-    $pdf->Cell(0,10,'Domicilio Fiscal: ',0,1);
+    $pdf->Cell(0,10,'Domicilio Fiscal: '.safe_sutf8_decode(cfdi($Receptor['DomicilioFiscalReceptor'])),0,1);
     $pdf->Ln(10);
     
     // Tabla
@@ -948,12 +967,14 @@ function generarPDF($array, $id) {
     $pdf->MultiCell(90, 5, numeroALetras(12772.24), 0, 'L');
 
     //print_r($array['TotalImpuestos']);
-    $totalImpuestos = $array['TotalImpuestos'];
-    $descuentos = '0.00';
+    $totalImpuestosTrasladados = $array['TotalImpuestosTrasladados'];
+    $totalImpuestosRetenidos = $array['TotalImpuestosRetenidos'];
+    
+    $subtotal = isset($array['SubTotal']) && is_numeric($array['SubTotal']) ? (float)$array['SubTotal'] : $array['Total'];
 
     $pdf->SetXY(90, $y);
     $pdf->SetFont('Arial', 'B', 10);
-    $pdf->Cell(100, 10, 'Subtotal: $' . number_format($array['SubTotal'], 2), 0, 1, 'R');
+    $pdf->Cell(100, 10, 'Subtotal: $' . number_format($subtotal, 2), 0, 1, 'R');
 
     $pdf->SetXY(90, $y + 5);
     $pdf->SetFont('Arial', 'B', 10);
@@ -963,12 +984,17 @@ function generarPDF($array, $id) {
     $pdf->SetFont('Arial', 'B', 10);
 
     // Verifica si $totalImpuestos es válido
-    $totalImpuestosFormatted = is_numeric($totalImpuestos) 
-        ? number_format($totalImpuestos, 2) 
+    $totalImpuestosTrasFormatted = is_numeric($totalImpuestosTrasladados) 
+        ? number_format($totalImpuestosTrasladados, 2) 
+        : number_format((isset($array['TotalImpuestos']) ? $array['TotalImpuestos'] : 0), 2);
+    $totalImpuestosReteFormatted = is_numeric($totalImpuestosRetenidos) 
+        ? number_format($totalImpuestosRetenidos, 2) 
         : '0.00';
-    $pdf->Cell(100, 10, 'Impuestos: $' . $totalImpuestosFormatted, 0, 1, 'R');
-
+    $pdf->Cell(100, 10, 'Impuestos Trasladados: $' . $totalImpuestosTrasFormatted, 0, 1, 'R');
     $pdf->SetXY(90, $y + 15);
+    $pdf->Cell(100, 10, 'Impuestos Retenidos: $' . $totalImpuestosReteFormatted, 0, 1, 'R');
+
+    $pdf->SetXY(90, $y + 20);
     $pdf->SetFont('Arial', 'B', 10);
     $pdf->Cell(100, 10, 'Total: $' . number_format($array['Total'], 2), 0, 1, 'R');
 

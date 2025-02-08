@@ -1,6 +1,7 @@
 {
     "require": {
         "guzzlehttp/guzzle": "^7.9",
-        "endroid/qr-code": "5.1.0"
+        "endroid/qr-code": "5.1.0",
+        "vlucas/phpdotenv": "^5.6"
     }
 }
