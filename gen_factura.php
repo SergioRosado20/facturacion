@@ -31,6 +31,8 @@ $data = json_decode(file_get_contents('php://input'), true);
 $data_string = json_encode($data);
 
 if (isset($data['cuerpo'])) {
+    $pagado = $data['cuerpo']['pagado'];
+    $pagado = $pagado ? 1 : 0;
     $moneda = $data['cuerpo']['Moneda'];
     $cambio = $data['cuerpo']['tipoCambio'];
     $productos = $data['cuerpo']['Conceptos'];
@@ -153,19 +155,19 @@ $descuentos = 0;
 foreach($productos as $producto) {
     $descuento = isset($producto['descuento']) ? $producto['descuento'] : 0;
     $importe = bcmul($producto["cantidad"], $producto["precio"], 2);
-    //$importe = bcsub($importe, $descuento, 2);
+    $importeSinDesc = bcsub($importe, $descuento, 2);
     $descuentos += $descuento;
 
     $impuestos = $producto["impuestos"];
 
     $nodoImp = [];
     foreach($impuestos as $impuesto) {
-        $impuestoImporte = number_format($importe * floatval($impuesto["tasaImp"]), 2, '.', '');
+        $impuestoImporte = number_format($importeSinDesc * floatval($impuesto["tasaImp"]), 2, '.', '');
         $prodImp = [
             "TipoImpuesto" => $impuesto["tipoImp"], //int
             "Impuesto" => $impuesto["impuesto"],    //int
             "Factor" => $impuesto["factorImp"],     //int
-            "Base" => $importe,                     //double
+            "Base" => $importeSinDesc,                     //double
             "Tasa" => $impuesto["tasaImp"],         //string:  "0.160000", "0.08000"
             "ImpuestoImporte" => $impuestoImporte   //double
         ];
@@ -207,7 +209,7 @@ foreach($productos as $producto) {
 }
 
 $totalImp = bcsub($totalImpuestoTrasladado, $totalImpuestoRetenido, 2);
-$subT = bcsub($subTotal, $descuentos, 2);
+$subT = bcsub($subTotal, $descuentos);
 $total = bcadd($subT, $totalImp, 2); // La multiplicación se realiza con 2 decimales de precisión
 // Redondea el total a 2 decimales para asegurar la precisión
 $totalRedondeado = round((float)$total, 2);
@@ -356,7 +358,7 @@ try {
     }
     //var_dump($data);
     //print_r($data);
-    $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
+    $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
             'accept' => 'application/json',
@@ -364,6 +366,8 @@ try {
             'content-type' => 'application/json',
         ],
     ]);
+    
+    
     //print_r($responseFactura);
     $content = $responseFactura->getBody()->getContents();
     $content = json_decode($content, true);
@@ -436,7 +440,7 @@ try {
             }
 
             $status = '1'; // Status Activa
-            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             $stmt = $con->prepare($sqlBase64);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
@@ -446,7 +450,7 @@ try {
             $fechaActual = date('Y-m-d H:i:s');
 
             // Vincular parámetros y ejecutar
-            $stmt->bind_param("isssssssssssssssss", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto);
+            $stmt->bind_param("isssssssssssssssssi", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
             }

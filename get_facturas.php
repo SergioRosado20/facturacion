@@ -104,7 +104,7 @@ while ($row = $resultado->fetch_assoc()) {
     $row['productos'] = [];
 
     // Consulta para obtener productos de cada factura
-    $sqlProductos = "SELECT * FROM encabezado_venta WHERE folio = ?";
+    /*$sqlProductos = "SELECT * FROM encabezado_venta WHERE folio = ?";
     $stmtProductos = $con->prepare($sqlProductos);
     $stmtProductos->bind_param("i", $row['fac_id']);
     $stmtProductos->execute();
@@ -112,7 +112,7 @@ while ($row = $resultado->fetch_assoc()) {
 
     while ($producto = $resultadoProductos->fetch_assoc()) {
         $row['productos'][] = $producto;
-    }
+    }*/
 
     $facturas[] = $row;
 }

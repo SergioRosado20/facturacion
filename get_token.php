@@ -20,15 +20,18 @@ $database_name = $_ENV['DATABASE_NAME'] ?? '';
 
 $con = new mysqli($database_host, $database_user, $database_password, $database_name);
 date_default_timezone_set('America/Mexico_City');
+$con->set_charset("utf8");
+/*$usuario = 'PruebasTimbrado';
+$password = '@Notiene1';*/
 
-$usuario = 'PruebasTimbrado';
-$password = '@Notiene1';
+$usuario = 'ROBS031020T71';
+$password = '¡MHtvxk31553';
 
 $client = new \GuzzleHttp\Client();
 
 try {
-  $response = $client->request('DELETE', 'https://testapi.facturoporti.com.mx/token/borrar', [
-      'body' => '{"usuario":"PruebasTimbrado","password":"@Notiene1"}',
+  $response = $client->request('DELETE', 'https://api.facturoporti.com.mx/token/borrar', [
+      'body' => '{"usuario":"ROBS031020T71","password":"¡MHtvxk31553"}',
       'headers' => [
           'accept' => 'application/json',
           'content-type' => 'application/*+json',
@@ -44,7 +47,7 @@ try {
 }
 
 try {
-  $responseToken = $client->request('GET', 'https://testapi.facturoporti.com.mx/token/crear?Usuario='.$usuario.'&Password='.$password.'', [
+  $responseToken = $client->request('GET', 'https://api.facturoporti.com.mx/token/crear?Usuario='.$usuario.'&Password='.$password.'', [
       'headers' => [
           'accept' => 'application/json',
       ],

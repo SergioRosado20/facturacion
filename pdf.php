@@ -14,6 +14,22 @@ use Endroid\QrCode\Color\Color;
 require_once "cors.php";
 cors();
 
+$data = json_decode(file_get_contents('php://input'), true);
+
+if($_GET['preview'] && $data) {
+    $pdfBase64 = arrayPdf($data);
+    if ($pdfBase64) {
+        // Decodifica el Base64
+        echo json_encode([
+            'status' => 'success',
+            'pdf' => $pdfBase64
+        ]);
+        exit;
+    } else {
+        echo 'Error: No se pudo generar el PDF.';
+    }
+}
+
 if($_GET['archivo'] && $_GET['pdf'] && $_GET['id']) {
     $archivo = $_GET['archivo'];
     //echo "Archivo recibido: $archivo\n";
@@ -255,10 +271,7 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
                     'ValorUnitario' => (string) $concepto['ValorUnitario'],
                     'Descuento' => (string) $concepto['Descuento'],
                     'Importe' => (string) $concepto['Importe'],
-                    'Base' => (string) $impuestos[0]['Base'],
-                    'Impuesto' => (string) $impuestos[0]['Impuesto'],
-                    'TipoFactor' => (string) $impuestos[0]['TipoFactor'],
-                    'TasaOCuota' => (string) $impuestos[0]['TasaOCuota'],
+                    'Base' => (string) $factura['SubTotal'],
                     'ImporteImpuestoTrasladado' => (string) $prodImpuestoTrasladado,
                     'ImporteImpuestoRetenido' => (string) $prodImpuestoRetenido,
                 ];
@@ -321,6 +334,71 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
     }
 }
 
+function arrayPdf($data) {
+    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+    $dotenv->load();
+    
+    $database_host = $_ENV['DATABASE_HOST'] ?? '';
+    $database_user = $_ENV['DATABASE_USER'] ?? '';
+    $database_password = $_ENV['DATABASE_PASSWORD'] ?? '';
+    $database_name = $_ENV['DATABASE_NAME'] ?? '';
+    $enc_key = $_ENV['ENCRYPT_KEY'] ?? '';
+    
+    $con = new mysqli($database_host, $database_user, $database_password, $database_name);
+
+    $res_emisor = null;
+    try {
+        $sql = "SELECT * FROM `cuenta_factura` ORDER BY `id` DESC LIMIT 1";
+    
+        // Ejecutar la consulta (puedes usar tu conexión y método habitual)
+        $stmt = $con->prepare($sql);
+        $stmt->execute();
+        // Obtener el resultado
+        $result = $stmt->get_result();
+    
+        $stmt->close();
+        $con->close();
+        if ($result && $row = $result->fetch_assoc()) {
+            $res_emisor = $row;
+            //print_r($emisor);
+        } else {
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'No se encontró ningún registro en la tabla token.',
+            ]);
+        }
+    } catch (\Exception $e) {
+        echo json_encode([
+        'status' => 'error',
+        'message' => 'Ha ocurrido un error inesperado.',
+        'desc' => $e->getMessage(),
+        ]);
+        exit;
+    }
+
+    $arrEmisor = [
+        "Rfc" => $res_emisor["rfc"],
+        "Nombre" => $res_emisor["nombre"],
+        "RegimenFiscal" => $res_emisor["regimen"]
+    ];
+
+    $data['Emisor'] = $arrEmisor;
+
+    //Info General
+    $data['Fecha'] = date('Y-m-d\TH:i:s');
+    $data['LugarExpedicion'] = $res_emisor['cp'];
+    $data['TipoCambio'] = isset($data['TipoCambio']) ? $data['TipoCambio'] : 1;
+    $data['TipoDeComprobante'] = 'I';
+    $data['Serie'] = 'AB';
+
+    $pdf = generarPDF($data, '1');
+    if($pdf) {
+        return $pdf;
+    } else {
+        echo 'Error al generar el pdf 2.';
+    }
+}
+
 function generarPDF($array, $id) {
     ob_start();
     //print_r($id);
@@ -336,8 +414,8 @@ function generarPDF($array, $id) {
                     die("Error: No se pudo obtener información de la imagen.");
                 }*/
                 // Logo
-                if (file_exists('../../assets/img/logoB.png')) {
-                    $this->Image('../../assets/img/logoB.png', 10, 10, 100, 20);
+                if (file_exists('assets/logo.png')) {
+                    $this->Image('assets/logo.png', 10, 1, 80, 50);
                 }
                 // Arial bold 15
                 $this->SetFont('Arial', 'B', 12);
@@ -789,8 +867,9 @@ function generarPDF($array, $id) {
             $descuento = 0.00;
         }
         $descuentos = $descuentos + floatval($concepto['Descuento']);
-        $impuestoValor = isset($concepto['Impuesto']) && $concepto['Impuesto'] != 0 ? $concepto['Impuesto'] : (isset($concepto['ImporteImpuestoTrasladado']) ? $concepto['ImporteImpuestoTrasladado'] : 0);
-        $impuestosTrasladados = '$' . number_format((float)$impuestoValor, 2); // Impuesto formateado
+        //$impuestoValor = isset($concepto['Impuesto']) && $concepto['Impuesto'] !== '0' ? $concepto['Impuesto'] : (isset($concepto['ImporteImpuestoTrasladado']) ? $concepto['ImporteImpuestoTrasladado'] : 0);
+        //print_r($impuestoValor);
+        $impuestosTrasladados = '$' . number_format($concepto['ImporteImpuestoTrasladado'], 2); // Impuesto formateado
         $impuestosRetenidos = '$' . number_format($concepto['ImporteImpuestoRetenido'], 2); // Impuesto formateado
         $importe = '$' . number_format($concepto['Importe'], 2); // Importe formateado
 
@@ -964,7 +1043,7 @@ function generarPDF($array, $id) {
     $pdf->SetFont('Arial', 'B', 10);
     $pdf->Cell(0, 10, 'Total con letra:', 0, 1, 'L');
     $pdf->SetFont('Arial', '', 8);
-    $pdf->MultiCell(90, 5, numeroALetras(12772.24), 0, 'L');
+    $pdf->MultiCell(90, 5, safe_sutf8_decode(numeroALetras($array['Total'])), 0, 'L');
 
     //print_r($array['TotalImpuestos']);
     $totalImpuestosTrasladados = $array['TotalImpuestosTrasladados'];
@@ -1003,81 +1082,87 @@ function generarPDF($array, $id) {
     $y = $pdf->GetY();
     $y = $y+10;
 
-    // Añadir QR
-    $tamanoQR = 40; // Tamaño del QR en mm
-    $espacioDisponible = $pdf->GetPageHeight() - $pdf->GetY(); // Espacio restante en la página
+    if(isset($array['Complemento'])) {
+        // Añadir QR
+        $tamanoQR = 40; // Tamaño del QR en mm
+        $espacioDisponible = $pdf->GetPageHeight() - $pdf->GetY(); // Espacio restante en la página
 
-    // Verificar si el QR cabe en la página actual
-    if ($espacioDisponible < $tamanoQR) {
-        // Si no hay suficiente espacio, crear una nueva página
-        $pdf->AddPage();
+        // Verificar si el QR cabe en la página actual
+        if ($espacioDisponible < $tamanoQR) {
+            // Si no hay suficiente espacio, crear una nueva página
+            $pdf->AddPage();
+            $y = $pdf->GetY();
+            $y = $y+10;
+        }
+
+        // Generar el código QR en la posición deseada
+        if (file_exists($qrFilePath)) {
+            $pdf->Image($qrFilePath, 10, $y, 40, 40);
+        } else {
+            echo "El archivo no se encuentra en la ruta: ".$qrFilePath;
+        }
+
+        $pdf->SetXY(50, $y); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(50, 5, 'Serie del Certificado del emisor:', 0, 1, 'R');
         $y = $pdf->GetY();
-        $y = $y+10;
-    }
+        $pdf->SetXY(100, $y-5); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->MultiCell(90, 5, $array['Complemento']['NoCertificadoSAT'], 0, 'L');
 
-    // Generar el código QR en la posición deseada
-    if (file_exists($qrFilePath)) {
-        $pdf->Image($qrFilePath, 10, $y, 40, 40);
+        $y = $pdf->GetY();
+        $y = $y+5;
+        $pdf->SetXY(50, $y); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(50, 5, 'Folio Fiscal:', 0, 1, 'R');
+        $y = $pdf->GetY();
+        $pdf->SetXY(100, $y-5); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->MultiCell(90, 5, $array['Complemento']['UUID'], 0, 'L');
+
+        $y = $pdf->GetY();
+        $y = $y+5;
+        $pdf->SetXY(50, $y); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(50, 5, 'No. de serie del Certificado del SAT:', 0, 1, 'R');
+        $y = $pdf->GetY();
+        $pdf->SetXY(100, $y-5); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->MultiCell(90, 5, $array['Complemento']['NoCertificadoSAT'], 0, 'L');
+
+        $y = $pdf->GetY();
+        $y = $y+5;
+        $pdf->SetXY(50, $y); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->Cell(50, 10, safe_sutf8_decode('Fecha y hora de certificación:'), 0, 1, 'R');
+        $y = $pdf->GetY();
+        $pdf->SetXY(100, $y-10); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->MultiCell(90, 10, $array['Complemento']['FechaTimbrado'], 0, 'L');
+
+        // Añadir Sello digital del CFDI
+        $y = $pdf->GetY();
+        $y = $y +10;
+        $pdf->SetXY(10, $y); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->Cell(0, 5, 'Sello digital del CFDI:', 0, 1, 'C', true);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->MultiCell(0, 5, $array['Complemento']['SelloCFD'], 0, 'L');
+
+        // Añadir Sello del SAT
+        $y = $pdf->GetY();
+        $y = $y +5;
+        $pdf->SetXY(10, $y); // Ajusta la posición en el PDF
+        $pdf->SetFont('Arial', 'B', 10);
+        $pdf->Cell(0, 5, 'Sello del SAT:', 0, 1, 'C', true);
+        $pdf->SetFont('Arial', '', 8);
+        $pdf->MultiCell(0, 5, $array['Complemento']['SelloSAT'], 0, 'L');
+
     } else {
-        echo "El archivo no se encuentra en la ruta: ".$qrFilePath;
+        $pdf->MultiCell(0, 5, safe_sutf8_decode('Este documento es una previsualización de la factura y no tiene validez legal ni fiscal.
+Esta previsualización se genera con fines informativos y no constituye una factura electrónica timbrada por el SAT.
+Para obtener una factura oficial con validez fiscal, es necesario completar el proceso de timbrado.'), 0, 'C');
     }
-
-    $pdf->SetXY(50, $y); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->Cell(50, 5, 'Serie del Certificado del emisor:', 0, 1, 'R');
-    $y = $pdf->GetY();
-    $pdf->SetXY(100, $y-5); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->MultiCell(90, 5, $array['Complemento']['NoCertificadoSAT'], 0, 'L');
-
-    $y = $pdf->GetY();
-    $y = $y+5;
-    $pdf->SetXY(50, $y); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->Cell(50, 5, 'Folio Fiscal:', 0, 1, 'R');
-    $y = $pdf->GetY();
-    $pdf->SetXY(100, $y-5); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->MultiCell(90, 5, $array['Complemento']['UUID'], 0, 'L');
-
-    $y = $pdf->GetY();
-    $y = $y+5;
-    $pdf->SetXY(50, $y); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->Cell(50, 5, 'No. de serie del Certificado del SAT:', 0, 1, 'R');
-    $y = $pdf->GetY();
-    $pdf->SetXY(100, $y-5); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->MultiCell(90, 5, $array['Complemento']['NoCertificadoSAT'], 0, 'L');
-
-    $y = $pdf->GetY();
-    $y = $y+5;
-    $pdf->SetXY(50, $y); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->Cell(50, 10, safe_sutf8_decode('Fecha y hora de certificación:'), 0, 1, 'R');
-    $y = $pdf->GetY();
-    $pdf->SetXY(100, $y-10); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->MultiCell(90, 10, $array['Complemento']['FechaTimbrado'], 0, 'L');
-
-    // Añadir Sello digital del CFDI
-    $y = $pdf->GetY();
-    $y = $y +10;
-    $pdf->SetXY(10, $y); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', 'B', 10);
-    $pdf->Cell(0, 5, 'Sello digital del CFDI:', 0, 1, 'C', true);
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->MultiCell(0, 5, $array['Complemento']['SelloCFD'], 0, 'L');
-
-    // Añadir Sello del SAT
-    $y = $pdf->GetY();
-    $y = $y +5;
-    $pdf->SetXY(10, $y); // Ajusta la posición en el PDF
-    $pdf->SetFont('Arial', 'B', 10);
-    $pdf->Cell(0, 5, 'Sello del SAT:', 0, 1, 'C', true);
-    $pdf->SetFont('Arial', '', 8);
-    $pdf->MultiCell(0, 5, $array['Complemento']['SelloSAT'], 0, 'L');
-
     /*// Añadir la Cadena original del complemento
     $pdf->SetXY(60, 300); // Ajusta la posición en el PDF
     $pdf->SetFont('Arial', 'B', 10);
@@ -1098,4 +1183,5 @@ function generarPDF($array, $id) {
     // Retornar el PDF en formato base64
     return $pdfBase64;
 }
+
 ?>

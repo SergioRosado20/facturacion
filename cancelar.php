@@ -109,7 +109,7 @@ if($factura_id) {
             "password" => "12345678a"
         ];
 
-        $resCancelacion = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/cancelar/csd', [
+        $resCancelacion = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/cancelar/csd', [
             'body' => json_encode($body),
             'headers' => [
                 'accept' => 'application/json',
