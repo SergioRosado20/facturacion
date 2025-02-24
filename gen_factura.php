@@ -31,6 +31,9 @@ $data = json_decode(file_get_contents('php://input'), true);
 $data_string = json_encode($data);
 
 if (isset($data['cuerpo'])) {
+    $uuidRelacionado = isset($data['cuerpo']['uuidRelacionado']) ? $data['cuerpo']['uuidRelacionado'] : null;
+    $anticipo = $data['cuerpo']['anticipo'];
+    $anticipo = $anticipo ? 1 : 0;
     $pagado = $data['cuerpo']['pagado'];
     $pagado = $pagado ? 1 : 0;
     $moneda = $data['cuerpo']['Moneda'];
@@ -151,6 +154,7 @@ $subTotal = 0;
 $totalImpuestoTrasladado = 0;
 $totalImpuestoRetenido = 0;
 $descuentos = 0;
+$anticipos = 0;
 // Iterar sobre cada producto y formatearlo para el array Conceptos
 foreach($productos as $producto) {
     $descuento = isset($producto['descuento']) ? $producto['descuento'] : 0;
@@ -161,22 +165,24 @@ foreach($productos as $producto) {
     $impuestos = $producto["impuestos"];
 
     $nodoImp = [];
-    foreach($impuestos as $impuesto) {
-        $impuestoImporte = number_format($importeSinDesc * floatval($impuesto["tasaImp"]), 2, '.', '');
-        $prodImp = [
-            "TipoImpuesto" => $impuesto["tipoImp"], //int
-            "Impuesto" => $impuesto["impuesto"],    //int
-            "Factor" => $impuesto["factorImp"],     //int
-            "Base" => $importeSinDesc,                     //double
-            "Tasa" => $impuesto["tasaImp"],         //string:  "0.160000", "0.08000"
-            "ImpuestoImporte" => $impuestoImporte   //double
-        ];
-
-        $nodoImp[] = $prodImp;
-        if($impuesto['tipoImp'] == 1) {
-            $totalImpuestoTrasladado += $impuestoImporte;
-        } else if($impuesto['tipoImp'] == 2) {
-            $totalImpuestoRetenido += $impuestoImporte;
+    if ($producto["clavePS"] !== "84111506") {
+        foreach($impuestos as $impuesto) {
+            $impuestoImporte = number_format($importeSinDesc * floatval($impuesto["tasaImp"]), 2, '.', '');
+            $prodImp = [
+                "TipoImpuesto" => $impuesto["tipoImp"], //int
+                "Impuesto" => $impuesto["impuesto"],    //int
+                "Factor" => $impuesto["factorImp"],     //int
+                "Base" => $importeSinDesc,              //double
+                "Tasa" => $impuesto["tasaImp"],         //string:  "0.160000", "0.08000"
+                "ImpuestoImporte" => $impuestoImporte   //double
+            ];
+    
+            $nodoImp[] = $prodImp;
+            if($impuesto['tipoImp'] == 1) {
+                $totalImpuestoTrasladado += $impuestoImporte;
+            } else if($impuesto['tipoImp'] == 2) {
+                $totalImpuestoRetenido += $impuestoImporte;
+            }
         }
     }
 
@@ -205,17 +211,21 @@ foreach($productos as $producto) {
     }
 
     $conceptos[] = $concepto;
-    $subTotal += $producto["subTotal"];
+    if ($producto["clavePS"] === "84111506") { // Verifica si es un anticipo
+        $anticipos = bcadd($anticipos, abs($importe), 2);
+        if($anticipo === 1) {
+            $subTotal += $producto["subTotal"];
+        }
+    } else {
+        $subTotal += $producto["subTotal"];
+    }
 }
 
 $totalImp = bcsub($totalImpuestoTrasladado, $totalImpuestoRetenido, 2);
-$subT = bcsub($subTotal, $descuentos);
-$total = bcadd($subT, $totalImp, 2); // La multiplicación se realiza con 2 decimales de precisión
-// Redondea el total a 2 decimales para asegurar la precisión
+$subT = bcsub($subTotal, $descuentos, 2);
+$total = bcadd($subT, $totalImp, 2);
 $totalRedondeado = round((float)$total, 2);
-// Se conviérte a float para el JSON
-$totalFloat = (float)$totalRedondeado;
-$totalReportado = $totalFloat;
+$totalReportado = (float)$totalRedondeado;
 $valorEsperado = calcularValorEsperado($conceptos);
 $totalAjustado = ajustarTotalSiEsNecesario($totalReportado, $valorEsperado);
 //print_r($conceptos);
@@ -297,45 +307,44 @@ try {
             "NumeroDecimales" => 2,
             "TipoCFDI" => "Ingreso",
             "EnviaEmail" => false,
-            "ReceptorEmail" => "sergioedurdo21@gmail.com",
             "EmailMensaje" => "Factura de ISI Import",
             "noUsarPlantillaHtml" => "true",
         ],
         "Encabezado" => [
             "Emisor" => [
-            "RFC" => $rfcEmisor,
-            "NombreRazonSocial" => $razonSocialEmisor,
-            "RegimenFiscal" => $regimenFiscEmisor,
-            "Direccion" => [
-                [
-                "Calle" => $calleEmisor,
-                "NumeroExterior" => $numExtEmisor,
-                "NumeroInterior" => $numIntEmisor,
-                "Colonia" => $coloniaEmisor,
-                "Localidad" => $localidadEmisor,
-                "Municipio" => $municipioEmisor,
-                "Estado" => $estadoEmisor,
-                "Pais" => $paisEmisor,
-                "CodigoPostal" => $cpEmisor
+                "RFC" => $rfcEmisor,
+                "NombreRazonSocial" => $razonSocialEmisor,
+                "RegimenFiscal" => $regimenFiscEmisor,
+                "Direccion" => [
+                    [
+                    "Calle" => $calleEmisor,
+                    "NumeroExterior" => $numExtEmisor,
+                    "NumeroInterior" => $numIntEmisor,
+                    "Colonia" => $coloniaEmisor,
+                    "Localidad" => $localidadEmisor,
+                    "Municipio" => $municipioEmisor,
+                    "Estado" => $estadoEmisor,
+                    "Pais" => $paisEmisor,
+                    "CodigoPostal" => $cpEmisor
+                    ]
                 ]
-            ]
             ],
             "Receptor" => [
-            "RFC" => $receptor['rfc'],
-            "NombreRazonSocial" => $receptor['nombre'],
-            "UsoCFDI" => $receptor['cfdi'],
-            "RegimenFiscal" => $receptor['regimen'],
-            "Direccion" => [            
-                "Calle" => $receptor['calle'],
-                "NumeroExterior" => $receptor['numext'],
-                "NumeroInterior" => $receptor['numint'],
-                "Colonia" => $receptor['colonia'],
-                "Localidad" => $receptor['ciudad'],
-                "Municipio" => $receptor['municipio'],
-                "Estado" => $receptor['estado'],
-                "Pais" => $receptor['pais'],
-                "CodigoPostal" => $receptor['cp']
-            ]
+                "RFC" => $receptor['rfc'],
+                "NombreRazonSocial" => $receptor['nombre'],
+                "UsoCFDI" => $receptor['cfdi'],
+                "RegimenFiscal" => $receptor['regimen'],
+                "Direccion" => [            
+                    "Calle" => $receptor['calle'],
+                    "NumeroExterior" => $receptor['numext'],
+                    "NumeroInterior" => $receptor['numint'],
+                    "Colonia" => $receptor['colonia'],
+                    "Localidad" => $receptor['ciudad'],
+                    "Municipio" => $receptor['municipio'],
+                    "Estado" => $receptor['estado'],
+                    "Pais" => $receptor['pais'],
+                    "CodigoPostal" => $receptor['cp']
+                ]
             ],
             "Fecha" => $fechaExpedicion,
             "Serie" => "AB",
@@ -355,6 +364,10 @@ try {
 
     if($moneda !== 'MXN') {
         $data['Encabezado']['TipoCambio'] = $cambio;
+    }
+    if(!empty($uuidRelacionado)) {
+            $data['Encabezado']['TipoRelacion'] = "07";
+            $data['Encabezado']['cfdIsRelacionados'] = $uuidRelacionado;
     }
     //var_dump($data);
     //print_r($data);
@@ -440,7 +453,7 @@ try {
             }
 
             $status = '1'; // Status Activa
-            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`, `anticipo`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             $stmt = $con->prepare($sqlBase64);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
@@ -450,7 +463,7 @@ try {
             $fechaActual = date('Y-m-d H:i:s');
 
             // Vincular parámetros y ejecutar
-            $stmt->bind_param("isssssssssssssssssi", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado);
+            $stmt->bind_param("isssssssssssssssssii", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado, $anticipo);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
             }
@@ -459,6 +472,31 @@ try {
             $idFactura = $con->insert_id;
 
             $stmt->close();
+
+            if (!empty($uuidRelacionado)) {
+                // Descomponer el string en un array usando el punto y coma como separador
+                $uuids = explode(';', $uuidRelacionado);
+            
+                // Preparar la consulta de actualización
+                $sqlUpdate = "UPDATE facturas SET id_relacion = ? WHERE uuid = ?";
+                $stmtUpdate = $con->prepare($sqlUpdate);
+                
+                if ($stmtUpdate === false) {
+                    throw new Exception("Error en la preparación de la consulta de actualización: " . $con->error);
+                }
+            
+                // Recorrer cada UUID y actualizar en la BD
+                foreach ($uuids as $uuid) {
+                    $uuid = trim($uuid); // Eliminar espacios en blanco extra
+                    if (!empty($uuid)) { // Evitar ejecutar la consulta con un UUID vacío
+                        $stmtUpdate->bind_param("is", $idFactura, $uuid);
+                        if (!$stmtUpdate->execute()) {
+                            throw new Exception("Error en la ejecución de la consulta de actualización: " . $stmtUpdate->error);
+                        }
+                    }
+                }
+                $stmtUpdate->close();
+            }
 
             logToFile($username, $userID, 'Inserción de la factura a la bd', "success");
 

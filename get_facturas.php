@@ -27,14 +27,20 @@ $data = json_decode($json, true);
 
 $id = isset($data["id"]) ? $data["id"] : null;
 $data_inner = isset($data['data']) ? $data['data'] : null; // Cambié la variable a $data_inner para evitar la sobrescritura
-$cant = isset($data['cant']) ? intval($data['cant']) : 10;
+$cant = isset($data['cant']) ? intval($data['cant']) : null;
 $page = isset($data['page']) ? intval($data['page']) : 1;
 $canceladas = isset($data['canceladas']) ? filter_var($data['canceladas'], FILTER_VALIDATE_BOOLEAN) : null; // Usa filter_var para asegurar que sea booleano
 $ppd = isset($data['ppd']) ? filter_var($data['ppd'], FILTER_VALIDATE_BOOLEAN) : null; // Usa filter_var para asegurar que sea booleano
 //print_r('Canceladas: '.$canceladas);
 //print_r('cant: '.$cant);
 
-$offset = ($page - 1) * $cant;
+if($cant !== null) {
+    $offset = ($page - 1) * $cant;
+    $offsetSql = 'LIMIT '.$cant.' OFFSET '.$offset;
+} else {
+    $offsetSql = '';
+}
+
 $whereClause = '';
 $whereClause .= $canceladas ? " status != 1" : " 1";
 $whereClause .= $ppd ? " AND metodoPago = 'PPD'" : null;
@@ -62,10 +68,10 @@ if($id !== null) {
     $sql .= " AND facturas.id = '". $con->real_escape_string($id) ."'";
 }
 if ($data_inner !== null) {
-    $sql .= ' AND (facturas.id LIKE "%' . $con->real_escape_string($data_inner) . '%" OR facturas.pedidos LIKE "%' . $con->real_escape_string($data_inner) . '%" OR company.name LIKE "%' . $con->real_escape_string($data_inner) . '%")';
+    $sql .= ' AND (facturas.id LIKE "%' . $con->real_escape_string($data_inner) . '%" OR facturas.cliente LIKE "%' . $con->real_escape_string($data_inner) . '%" OR company.name LIKE "%' . $con->real_escape_string($data_inner) . '%" OR facturas.uuid LIKE "%' . $con->real_escape_string($data_inner) . '%")';
 }
 
-$order = $canceladas ? " ORDER BY cancelaciones.id ASC LIMIT ? OFFSET ?" : " ORDER BY facturas.id ASC LIMIT ? OFFSET ?";
+$order = $canceladas ? " ORDER BY cancelaciones.id ASC ". $offsetSql : " ORDER BY facturas.id ASC ". $offsetSql;
 $sql .= $order;
 
 // Preparar la consulta para evitar inyecciones SQL
@@ -73,9 +79,6 @@ $stmt = $con->prepare($sql);
 if (!$stmt) {
     die("Error en la preparación de la consulta: " . $con->error);
 }
-
-// Enlazar parámetros
-$stmt->bind_param("ii", $cant, $offset);
 
 // Ejecutar la consulta
 $stmt->execute();
@@ -117,9 +120,12 @@ while ($row = $resultado->fetch_assoc()) {
     $facturas[] = $row;
 }
 
-
 // Convertir el array de facturas en formato JSON y mostrarlo
-$totalPages = ceil($total_registros / $cant);
+if($cant !== null) {
+    $totalPages = ceil($total_registros / $cant);
+} else {
+    $totalPages = 0;
+}
 
 echo json_encode([
     'total_registros' => $total_registros,
