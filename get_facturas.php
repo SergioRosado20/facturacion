@@ -17,7 +17,7 @@ $database_password = $_ENV['DATABASE_PASSWORD'] ?? '';
 $database_name = $_ENV['DATABASE_NAME'] ?? '';
 
 $con = new mysqli($database_host, $database_user, $database_password, $database_name);
-
+$con->set_charset("utf8mb4");
 if($con->connect_error) {
     die("Coneccion fallida: " . $con->connect_error);
 }

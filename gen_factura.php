@@ -25,13 +25,53 @@ $database_name = $_ENV['DATABASE_NAME'] ?? '';
 $enc_key = $_ENV['ENCRYPT_KEY'] ?? '';
 
 $con = new mysqli($database_host, $database_user, $database_password, $database_name);
+$con->set_charset("utf8mb4");
+
+function limpiarUtf8($input) {
+    if (is_array($input)) {
+        foreach ($input as $key => $value) {
+            $input[$key] = limpiarUtf8($value); // llamada recursiva
+        }
+    } elseif (is_string($input)) {
+        // Solo si no está codificado en UTF-8
+        if (!mb_check_encoding($input, 'UTF-8')) {
+            $input = mb_convert_encoding($input, 'UTF-8', 'ISO-8859-1');
+        }
+    } // Si no es string ni array (es int, float, bool, null, etc), lo deja tal cual
+
+    //print_r('Campo: '.$key.' - Valor: '.$input);
+    //echo nl2br('Campo: '.$key.' - Valor: '.$input.'\n');
+    return $input;
+}
 
 // Decodificar el JSON a un array asociativo
-$data = json_decode(file_get_contents('php://input'), true);
-$data_string = json_encode($data);
+$raw_json = file_get_contents('php://input');
+$data = json_decode($raw_json, true);
+
+if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+    die('Error al decodificar JSON: ' . json_last_error_msg());
+}
+
+
+$data = limpiarUtf8($data);
+//print_r($data);
+
+foreach ($data as $clave => $valor) {
+    if (!mb_check_encoding($valor, 'UTF-8')) {
+        echo "Campo '$clave' no está en UTF-8\n";
+    }
+}
+
+$data_string = json_encode($data, JSON_UNESCAPED_UNICODE);
+
+if ($data_string === false) {
+    die('Error al codificar JSON limpio: ' . json_last_error_msg());
+}
 
 if (isset($data['cuerpo'])) {
     $uuidRelacionado = isset($data['cuerpo']['uuidRelacionado']) ? $data['cuerpo']['uuidRelacionado'] : null;
+    $relacion = isset($data['cuerpo']['RelacionCfdi']) ? $data['cuerpo']['RelacionCfdi'] : null;
+    $comprobante = $data['cuerpo']['Comprobante'];
     $anticipo = $data['cuerpo']['anticipo'];
     $anticipo = $anticipo ? 1 : 0;
     $pagado = $data['cuerpo']['pagado'];
@@ -165,7 +205,7 @@ foreach($productos as $producto) {
     $impuestos = $producto["impuestos"];
 
     $nodoImp = [];
-    if ($producto["clavePS"] !== "84111506") {
+    if (!empty($impuestos)) {
         foreach($impuestos as $impuesto) {
             $impuestoImporte = number_format($importeSinDesc * floatval($impuesto["tasaImp"]), 2, '.', '');
             $prodImp = [
@@ -213,9 +253,9 @@ foreach($productos as $producto) {
     $conceptos[] = $concepto;
     if ($producto["clavePS"] === "84111506") { // Verifica si es un anticipo
         $anticipos = bcadd($anticipos, abs($importe), 2);
-        if($anticipo === 1) {
-            $subTotal += $producto["subTotal"];
-        }
+        
+        $subTotal += $producto["subTotal"];
+        
     } else {
         $subTotal += $producto["subTotal"];
     }
@@ -228,7 +268,6 @@ $totalRedondeado = round((float)$total, 2);
 $totalReportado = (float)$totalRedondeado;
 $valorEsperado = calcularValorEsperado($conceptos);
 $totalAjustado = ajustarTotalSiEsNecesario($totalReportado, $valorEsperado);
-//print_r($conceptos);
 
 ///////////////////////////////////////////////////////////////////// TERMINA ZONA DE CONSUTLAS Y CÁLCULOS
 
@@ -305,7 +344,7 @@ try {
             "CFDI" => "Factura",
             "OpcionDecimales" => 2,
             "NumeroDecimales" => 2,
-            "TipoCFDI" => "Ingreso",
+            "TipoCFDI" => $comprobante,
             "EnviaEmail" => false,
             "EmailMensaje" => "Factura de ISI Import",
             "noUsarPlantillaHtml" => "true",
@@ -355,9 +394,6 @@ try {
             "SubTotal" => $subTotal,
             "Total" => $totalAjustado,
             "Folio" => $facturaActual,
-            "adicionales" => [[
-                "Folio" => "6475"
-            ]],
         ],
         "Conceptos" => $conceptos,
     ];
@@ -365,13 +401,12 @@ try {
     if($moneda !== 'MXN') {
         $data['Encabezado']['TipoCambio'] = $cambio;
     }
-    if(!empty($uuidRelacionado)) {
-            $data['Encabezado']['TipoRelacion'] = "07";
+    if(!empty($uuidRelacionado) && !empty($relacion)) {
+            $data['Encabezado']['TipoRelacion'] = $relacion;
             $data['Encabezado']['cfdIsRelacionados'] = $uuidRelacionado;
     }
-    //var_dump($data);
-    //print_r($data);
-    $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
+
+    $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
             'accept' => 'application/json',
@@ -380,7 +415,6 @@ try {
         ],
     ]);
     
-    
     //print_r($responseFactura);
     $content = $responseFactura->getBody()->getContents();
     $content = json_decode($content, true);
@@ -388,7 +422,7 @@ try {
     //echo $content;
 
     if ($codigo == '000') {
-        logToFile($username, $userID, 'Se generó correctamente la factura', "success");
+        logToFile($username, $userID, 'Se generó correctamente la factura', "success", json_encode($data));
         // Generar el XML y PDF base64
         try {
             $xml = $content['cfdiTimbrado']['respuesta']['cfdixml'];
@@ -549,7 +583,7 @@ try {
         'message' => 'Error en la solicitud de la factura: ' . $e->getMessage(),
         'data' => $data,
     ]);
-    logToFile($username, $userID, 'Error en la solicitud de la factura: '.$e->getMessage(), "error", $e->getMessage());
+    logToFile($username, $userID, 'Error en la solicitud de la factura: '.$e->getMessage(), "error", $data);
     exit;
 }
 

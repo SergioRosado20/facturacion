@@ -2,6 +2,7 @@
     "require": {
         "guzzlehttp/guzzle": "^7.9",
         "endroid/qr-code": "5.1.0",
-        "vlucas/phpdotenv": "^5.6"
+        "vlucas/phpdotenv": "^5.6",
+        "phpoffice/phpspreadsheet": "^4.2"
     }
 }

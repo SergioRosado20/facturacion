@@ -213,7 +213,7 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
                 'TotalImpuestosTrasladados' => (string) $totalImpuestosTrasladados,
                 'TotalImpuestosRetenidos' => (string) $totalImpuestosRetenidos,
                 'Total' => (string) $xml['Total'],
-                'MetodoPago' => (string) $xml['MetodoPago'],
+                'MetodoPago' => (string) isset($xml['MetodoPago']) ? $xml['MetodoPago'] : 'PUE',
                 'LugarExpedicion' => (string) $xml['LugarExpedicion'],
                 'TipoDeComprobante' => (string) $xml['TipoDeComprobante'],
                 'Moneda' => (string) $xml['Moneda'],
@@ -280,9 +280,22 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
 
             $totales = $xml->xpath('//cfdi:Complemento/pago20:Pagos/pago20:Totales');
             if (!empty($totales)) {
+                // Impuestos retenidos
+                $totalRetencionesIVA = (string) $totales[0]['TotalRetencionesIVA'];
+                $totalRetencionesISR = (string) $totales[0]['TotalRetencionesISR'];
+                $totalRetencionesIEPS = (string) $totales[0]['TotalRetencionesIEPS'];
+                
+                // Impuestos trasladados
                 $totalTrasladosBaseIVA16 = (string) $totales[0]['TotalTrasladosBaseIVA16'];
                 $totalTrasladosImpuestoIVA16 = (string) $totales[0]['TotalTrasladosImpuestoIVA16'];
                 $montoTotalPagos = (string) $totales[0]['MontoTotalPagos'];
+                
+                $pagos = $xml->xpath('//cfdi:Complemento/pago20:Pagos/pago20:Pago');
+                if (!empty($pagos)) {
+                    $formaPago = (string) $pagos[0]['FormaDePagoP'];
+                    $factura['FormaPago'] = $formaPago;
+                    $factura['Moneda'] = (string) $pagos[0]['MonedaP'];;
+                }
                 // Reemplazar los valores en el concepto si existen valores en totales
                 foreach ($factura['Conceptos'] as &$concepto) {
                     if ($concepto['ValorUnitario'] == "0") {
@@ -291,8 +304,10 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
                         $concepto['ImporteImpuesto'] = $totalTrasladosImpuestoIVA16;
                         $concepto['Impuesto'] = $totalTrasladosImpuestoIVA16;
                         $concepto['Importe'] = $montoTotalPagos;
-                    } 
-                } 
+                        $concepto['ImporteImpuestoTrasladado'] = $totalTrasladosImpuestoIVA16;
+                        $concepto['ImporteImpuestoRetenido'] = $totalRetencionesIVA + $totalRetencionesISR + $totalRetencionesIEPS;
+                    }
+                }
                 if($factura['SubTotal'] == '0'){
                     $factura['SubTotal'] = $totalTrasladosBaseIVA16;
                     $factura['TotalImpuestos'] = $totalTrasladosImpuestoIVA16;
@@ -869,9 +884,9 @@ function generarPDF($array, $id) {
         $descuentos = $descuentos + floatval($concepto['Descuento']);
         //$impuestoValor = isset($concepto['Impuesto']) && $concepto['Impuesto'] !== '0' ? $concepto['Impuesto'] : (isset($concepto['ImporteImpuestoTrasladado']) ? $concepto['ImporteImpuestoTrasladado'] : 0);
         //print_r($impuestoValor);
-        $impuestosTrasladados = '$' . number_format($concepto['ImporteImpuestoTrasladado'], 2); // Impuesto formateado
-        $impuestosRetenidos = '$' . number_format($concepto['ImporteImpuestoRetenido'], 2); // Impuesto formateado
-        $importe = '$' . number_format($concepto['Importe'], 2); // Importe formateado
+        $impuestosTrasladados = '$' . number_format(floatval($concepto['ImporteImpuestoTrasladado']), 2); // Impuesto formateado
+        $impuestosRetenidos = '$' . number_format(floatval($concepto['ImporteImpuestoRetenido']), 2); // Impuesto formateado
+        $importe = '$' . number_format(floatval($concepto['Importe']), 2); // Importe formateado
 
         // Agregar los datos del concepto al array data
         $data[] = [$cantidad, $claveUnidad, $claveProdServ, $descripcion, $valorUnitario, $descuento, $impuestosTrasladados, $impuestosRetenidos, $importe];
@@ -1031,7 +1046,7 @@ function generarPDF($array, $id) {
     $pdf->SetXY(10,85);
     $pdf->Cell(0,10,'Uso CFDI: '.safe_sutf8_decode(cfdi($Receptor['UsoCFDI'])),0,1);
     $pdf->SetXY(10,90);
-    $pdf->Cell(0,10,'Domicilio Fiscal: '.safe_sutf8_decode(cfdi($Receptor['DomicilioFiscalReceptor'])),0,1);
+    //$pdf->Cell(0,10,'Domicilio Fiscal: '.safe_sutf8_decode(cfdi($Receptor['DomicilioFiscalReceptor'])),0,1);
     $pdf->Ln(10);
     
     // Tabla
@@ -1064,8 +1079,8 @@ function generarPDF($array, $id) {
 
     // Verifica si $totalImpuestos es válido
     $totalImpuestosTrasFormatted = is_numeric($totalImpuestosTrasladados) 
-        ? number_format($totalImpuestosTrasladados, 2) 
-        : number_format((isset($array['TotalImpuestos']) ? $array['TotalImpuestos'] : 0), 2);
+        ? number_format((float) $totalImpuestosTrasladados, 2) 
+        : number_format((isset($array['TotalImpuestos']) ? (float) $array['TotalImpuestos'] : 0), 2);
     $totalImpuestosReteFormatted = is_numeric($totalImpuestosRetenidos) 
         ? number_format($totalImpuestosRetenidos, 2) 
         : '0.00';

@@ -20,6 +20,7 @@ $database_host = $_ENV['DATABASE_HOST'] ?? '';
 $database_user = $_ENV['DATABASE_USER'] ?? '';
 $database_password = $_ENV['DATABASE_PASSWORD'] ?? '';
 $database_name = $_ENV['DATABASE_NAME'] ?? '';
+$enc_key = $_ENV['ENCRYPT_KEY'] ?? '';
 
 $con = new mysqli($database_host, $database_user, $database_password, $database_name);
 

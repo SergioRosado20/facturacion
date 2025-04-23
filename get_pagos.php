@@ -45,7 +45,7 @@ $row = $resultado_count->fetch_assoc();
 
 $total_registros = $row['total'];
 
-$sql = "SELECT pagos.*, pagos.uuid as uuidPago, pagos.fecha as fechaPago, pagos.saldoInsoluto as insolutoPago, facturas.*, facturas.uuid as uuidFactura, facturas.fecha as fechaFactura
+$sql = "SELECT pagos.*, pagos.uuid as uuidPago, pagos.fecha as fechaPago, pagos.saldoInsoluto as insolutoPago, pagos.rutaXml as pagoXml, facturas.*, facturas.uuid as uuidFactura, facturas.fecha as fechaFactura
         FROM pagos
         INNER JOIN facturas ON pagos.idFactura = facturas.id
         WHERE $whereClause";

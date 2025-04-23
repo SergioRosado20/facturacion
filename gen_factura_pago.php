@@ -13,12 +13,6 @@ session_start();
 
 $client = new \GuzzleHttp\Client();
 
-/*$usuario = 'ROBS031020T71';
-$password = '@VMnmko74700';*/
-
-$usuario = 'PruebasTimbrado';
-$password = '@Notiene1';
-
 $username = $_SESSION['username'];
 $userID = $_SESSION['userID'];
 
@@ -406,6 +400,7 @@ try {
     $totalTrasladosBase = 0;
 
     $idFacturas = [];
+    $importePagado = 0;
     foreach($facturas as $factura) {
         $idFacturas[$factura['id_factura']] = [
             'iva' => $factura['iva'],
@@ -413,6 +408,8 @@ try {
             'moneda' => $moneda,
             'cambio' => $cambio,
         ];
+
+        $importePagado = bcadd($importePagado, $factura['importe'], 2);
     }
 
     $ids = array_keys($idFacturas);
@@ -420,6 +417,7 @@ try {
     
     $insolutos = [];
     //print_r($idFacturas);
+    $totalSaldoAnterior = 0;
 
     foreach ($idFacturas as $idFactura => $detalle) {
         // Obtener UUID de factura
@@ -485,10 +483,11 @@ try {
         $importePagadoFloat = number_format((float)$detalle['importe'], 2, '.', '');
         $saldoAnteriorFloat = floatval(number_format((float)$saldoAnterior, 2, '.', ''));
 
+        $saldoInsoluto = bcsub($saldoAnteriorFloat, $importePagadoFloat, 4);
+
         $objetoDeImpuesto = $detalle['iva'] ? '02' : '01';
-        $importePagadoSinIva = $detalle['iva'] ? (bcdiv($detalle['importe'], "1.16", 2)) : $detalle['importe'];
-        $impuestoPago = $detalle['iva'] ? bcsub($detalle['importe'], $importePagadoSinIva, 2) : 0;
-        $saldoInsoluto = bcsub($saldoAnterior, $importePagadoSinIva, 2);
+        $importePagadoSinIva = $detalle['iva'] ? (bcdiv($importePagadoFloat, "1.16", 2)) : $importePagadoFloat;
+        $impuestoPago = $detalle['iva'] ? bcsub($importePagadoFloat, $importePagadoSinIva, 2) : 0;
 
         if ($saldoInsoluto < 0) {
             http_response_code(400);
@@ -531,13 +530,21 @@ try {
 
         $documentosRelacionados[] = $documento;
         $insolutos[$idFactura] = $saldoInsoluto;
-        $totalImpuestoPagado = bcadd($totalImpuestoPagado, $impuestoPago, 2);
-        $totalTrasladosBase = bcadd($totalTrasladosBase, $importePagadoSinIva, 2);
+        if ($detalle['iva']) {
+            $totalImpuestoPagado = bcadd($totalImpuestoPagado, $impuestoPago, 2);
+            $totalTrasladosBase = bcadd($totalTrasladosBase, $importePagadoSinIva, 2);
+        }
+        $totalSaldoInsoluto = bcadd($totalSaldoInsoluto, $saldoInsoluto, 2);
+
+        $totalSaldoAnterior = bcadd($totalSaldoAnterior, $saldoAnterior, 2);
     }
 
-    if ($totalSaldoInsoluto > $importePagadoFloat) {
+    if ($importePagado > $totalSaldoAnterior) {
         http_response_code(400);
-        throw new Exception("El saldo total insoluto es mayor que el importe pagado.");
+        print_r($totalSaldoInsoluto);
+        print_r($importePagado);
+        print_r($documentosRelacionados);
+        throw new Exception("El importe pagado es mayor que el saldo total anterior de las facturas.");
     }
 
     $data = [
@@ -559,6 +566,8 @@ try {
         "Encabezado" => [
             "CFDIsRelacionados" => null,
             "TipoRelacion" => null,
+            "FormaPago" => $formaPago,
+            "MetodoPago" => 'PUE',
             "Emisor" => [
                 "RFC" => $rfcEmisor,
                 "NombreRazonSocial" => $razonSocialEmisor,
@@ -596,7 +605,7 @@ try {
             ],
             "Fecha" => $fechaExpedicion,
             "Serie" => "AB",
-            "Moneda" => "XXX",
+            "Moneda" => $moneda,
             "LugarExpedicion" => "42501",
             "SubTotal" => 0,
             "Total" => 0,
@@ -656,7 +665,7 @@ try {
         $data["Complemento"]["PagosV20"]["Totales"]["TotalTrasladosImpuestoIVA16"] = $totalImpuestoPagado;
     }
     //var_dump($data);
-    $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
+    $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
             'accept' => 'application/json',

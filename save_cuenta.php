@@ -23,6 +23,7 @@ $database_name = $_ENV['DATABASE_NAME'] ?? '';
 $key = $_ENV['ENCRYPT_KEY'] ?? '';
 
 $con = new mysqli($database_host, $database_user, $database_password, $database_name);
+$con->set_charset("utf8mb4");
 
 if ($con->connect_error) {
     echo json_encode([
@@ -32,7 +33,27 @@ if ($con->connect_error) {
     exit;
 }
 
+function limpiarUtf8($input) {
+    if (is_array($input)) {
+        foreach ($input as $key => $value) {
+            $input[$key] = limpiarUtf8($value);
+        }
+    } elseif (is_string($input)) {
+        if (!mb_check_encoding($input, 'UTF-8')) {
+            $input = mb_convert_encoding($input, 'UTF-8', 'ISO-8859-1');
+        }
+    }
+    return $input;
+}
+function limpiarNombreArchivo($nombre) {
+    $nombre = limpiarUtf8($nombre);
+    // Reemplaza espacios por guiones bajos y elimina caracteres peligrosos
+    $nombre = preg_replace('/[^A-Za-z0-9_\.\-]/', '_', $nombre);
+    return $nombre;
+}
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $_POST = limpiarUtf8($_POST);
     $nombre = $_POST['nombre'];
     $rfc = $_POST['rfc'];
     $regimen = $_POST['regimen'];
@@ -62,13 +83,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     $certificado = '';
     if (isset($_FILES['certificado']) && $_FILES['certificado']['error'] == UPLOAD_ERR_OK) {
-        $certificado = $uploads_dir . '/' . basename($_FILES['certificado']['name']);
+        $certificado_nombre = limpiarNombreArchivo($_FILES['certificado']['name']);
+        $certificado = $uploads_dir . '/' . $certificado_nombre;
         move_uploaded_file($_FILES['certificado']['tmp_name'], $certificado);
     }
 
     $llave = '';
     if (isset($_FILES['llave']) && $_FILES['llave']['error'] == UPLOAD_ERR_OK) {
-        $llave = $uploads_dir . '/' . basename($_FILES['llave']['name']);
+        $llave_nombre = limpiarNombreArchivo($_FILES['llave']['name']);
+        $llave = $uploads_dir . '/' . $llave_nombre;
         move_uploaded_file($_FILES['llave']['tmp_name'], $llave);
     }
 
