@@ -23,7 +23,7 @@ $token = "";
 
 $data_string = json_encode($data);
 
-logToFile($username, $userID, 'Datos recibidos para el pago de factura: '.$data_string, "success", $data_string);
+logToFile('User', 'userID', 'Datos recibidos para el pago de factura: '.$data_string, "success", $data_string);
 
 ///////////////////////////////////////////////////////////////////// INICIA ZONA DE CONSUTLAS Y CÁLCULOS
 
@@ -322,7 +322,7 @@ if (isset($data['productos']) && is_array($data['productos'])) {
                                 "Factor"            => $impuestoDetalle["Factor"],
                                 "Base"              => $impuestoDetalle["Base"],
                                 "Tasa"              => $impuestoDetalle["Tasa"],
-                                // En el XML se suele usar “ImpuestoImporte” como etiqueta para el importe
+                                // En el XML se suele usar "ImpuestoImporte" como etiqueta para el importe
                                 "ImpuestoImporte"   => $impuestoDetalle["Importe"]
                             ];
                         }
@@ -424,9 +424,6 @@ try {
         die("Error al descifrar la contraseña.");
     }
 
-    // Otros Datos
-    $fechaExpedicion = date('Y-m-d\TH:i:s');
-
     $CSD = $emisor["certificado"];
     $Key = $emisor["llave"];
 
@@ -476,7 +473,7 @@ try {
     $idFacturasString = implode(',', $ids);
     
     $insolutos = [];
-    //print_r($idFacturas);
+    $facturasInfo = []; // Nuevo objeto para almacenar información específica de cada factura
     $objetoDeImpuesto = "01";
 
     foreach ($idFacturas as $idFactura => $detalle) {
@@ -513,7 +510,13 @@ try {
         $saldoInsoluto = 0;
     
         // Obtener el último pago de la factura
-        $sql = "SELECT * FROM pagos WHERE idFactura = ? ORDER BY fecha DESC LIMIT 1";
+        $sql = "SELECT pf.*
+                FROM pagos_facturas pf
+                INNER JOIN pagos p ON pf.fkPago = p.idPago
+                WHERE pf.fkFactura = ?
+                AND p.status = 'Vigente'
+                ORDER BY p.fecha DESC
+                LIMIT 1";
         $stmt = $con->prepare($sql);
         if ($stmt === false) {
             echo json_encode([
@@ -538,6 +541,12 @@ try {
             $saldoAnterior = $rows['saldoInsoluto'];
             $numeroParcialidad = $rows['parcialidad'] + 1;
         }
+    
+        // Almacenar la información específica de la factura
+        $facturasInfo[$idFactura] = [
+            'saldoAnterior' => $saldoAnterior,
+            'numeroParcialidad' => $numeroParcialidad
+        ];
     
         // Calcular saldos
         $importePagadoFloat = number_format((float)$detalle['importe'], 4, '.', '');
@@ -644,6 +653,8 @@ try {
         $documentosRelacionados[] = $documento;
         $insolutos[$idFactura] = $saldoInsoluto;
     }
+
+    //print_r($insolutos);
 
     $totalBaseTrasladados   = 0;
     $totalImporteTrasladados = 0;
@@ -852,6 +863,8 @@ try {
         $data["Complemento"]["PagosV20"]["Totales"] = $totales;
     }
     //var_dump($data);
+    //print_r($fechaExpedicion);
+    //print_r($facturasInfo);
     $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
@@ -869,7 +882,7 @@ try {
     //echo $content;
 
     if ($codigo == '000') {
-        logToFile($username, $userID, 'Realizó un pago por: '.$importePagado.'; A la(s) factura(s) con id: '.$ids, "success");
+        logToFile('User', 'userID', 'Realizó un pago por: '.$importePagado.'; A la(s) factura(s) con id: '.json_encode($ids), "success", json_encode($data));
         $uuid = '';
         $xml = $content['cfdiTimbrado']['respuesta']['cfdixml'];
         $nombre = 'cfdi_' . date('Y-m-d_H-i-s') . '.xml';
@@ -878,47 +891,72 @@ try {
         $uuid = getUUIDForPaymentCfdi($ruta);
 
         try {
+
+            try{
+                foreach ($insolutos as $idFactura => $saldoInsoluto) {
+                    $sql = "UPDATE `facturas` SET `saldoInsoluto`=? WHERE `id`=?";
+                    $stmt = $con->prepare($sql);
+                    if ($stmt === false) {
+                        throw new Exception("Error en la preparación de la consulta: " . $con->error);
+                    }
+                    
+                    $stmt->bind_param("si", $saldoInsoluto, $idFactura);
+                    if (!$stmt->execute()) {
+                        throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
+                        logToFile('User', 'userID', 'Error al ejecutar el INSERT del pago: '.$stmt->error, "error");
+                    }
+                    $id = $con->insert_id;
+                    $stmt->close();
+                }
+                logToFile('User', 'userID', 'Se realizó el UPDATE de las facturas.', "success");
+            } catch (Exception $e) {
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => $e->getMessage()
+                ]);
+                logToFile('User', 'userID', 'Error al ejecutar el INSERT del pago: '.$e->getMessage(), "error");
+            }
+
+            // Primero insertamos el pago general
+            $sql = "INSERT INTO pagos(idFactura, importePagado, uuid, fecha, rutaXml, status) VALUES (?, ?, ?, ?, ?, ?)";
+            $stmt = $con->prepare($sql);
+            if ($stmt === false) {
+                throw new Exception("Error en la preparación de la consulta: " . $con->error);
+            }
+            $statusPago = 'Vigente';
+
+            $stmt->bind_param("sdssss", $idFacturasString, $importePagado, $uuid, $fechaExpedicion, $nombre, $statusPago);
+            if (!$stmt->execute()) {
+                throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
+                logToFile('User', 'userID', 'Error al ejecutar el INSERT del pago: '.$stmt->error, "error");
+            }
+            $idPago = $con->insert_id;
+            $stmt->close();
+            logToFile('User', 'userID', 'Se realizó el INSERT del pago general.', "success");
+
+            // Luego insertamos los detalles de cada factura
             foreach ($insolutos as $idFactura => $saldoInsoluto) {
-                $sql = "UPDATE `facturas` SET `saldoInsoluto`=? WHERE `id`=?";
+                // Obtener el importe pagado específico para esta factura
+                $importeFactura = $idFacturas[$idFactura]['importe'];
+                
+                // Obtener la información específica de la factura
+                $facturaInfo = $facturasInfo[$idFactura];
+                
+                $sql = "INSERT INTO pagos_facturas(fkPago, fkFactura, importePagado, saldoAnterior, saldoInsoluto, parcialidad, fecha) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?)";
                 $stmt = $con->prepare($sql);
                 if ($stmt === false) {
                     throw new Exception("Error en la preparación de la consulta: " . $con->error);
                 }
                 
-                $stmt->bind_param("si", $saldoInsoluto, $idFactura);
+                $stmt->bind_param("iidddss", $idPago, $idFactura, $importeFactura, $facturaInfo['saldoAnterior'], $saldoInsoluto, $facturaInfo['numeroParcialidad'], $fechaExpedicion);
                 if (!$stmt->execute()) {
                     throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
-                    logToFile($username, $userID, 'Error al ejecutar el INSERT del pago: '.$stmt->error, "error");
+                    logToFile('User', 'userID', 'Error al ejecutar el INSERT del detalle de pago: '.$stmt->error, "error");
                 }
-                $id = $con->insert_id;
                 $stmt->close();
             }
-            logToFile($username, $userID, 'Se realizó el UPDATE de las facturas.', "success");
-        } catch (Exception $e) {
-            echo json_encode([
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ]);
-            logToFile($username, $userID, 'Error al ejecutar el INSERT del pago: '.$e->getMessage(), "error");
-            exit;
-        }
-
-        // Inserción en la tabla pagos y pagos_facturas
-        try {
-            $sql = "INSERT INTO pagos(importepagado, saldoanterior, saldoinsoluto, parcialidad, uuid, idFactura, fecha, rutaXml) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-            $stmt = $con->prepare($sql);
-            if ($stmt === false) {
-                throw new Exception("Error en la preparación de la consulta: " . $con->error);
-            }
-            
-            $stmt->bind_param("ssssssss", $importePagado, $saldoAnterior, $saldoInsoluto, $numeroParcialidad, $uuid, $idFacturasString, $fechaExpedicion, $nombre);
-            if (!$stmt->execute()) {
-                throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
-                logToFile($username, $userID, 'Error al ejecutar el INSERT del pago: '.$stmt->error, "error");
-            }
-            $id = $con->insert_id;
-            $stmt->close();
-            logToFile($username, $userID, 'Se realizó el INSERT del pago.', "success");
+            logToFile('User', 'userID', 'Se realizó el INSERT de los detalles de pago.', "success");
 
             $sqlSello = "UPDATE `timbres` SET `restantes`=`restantes` - 1,`fecha_update`= ? WHERE 1 ORDER BY `id` DESC LIMIT 1";
             $stmt = $con->prepare($sqlSello);
@@ -940,7 +978,7 @@ try {
                 'status' => 'error',
                 'message' => $e->getMessage()
             ]);
-            logToFile($username, $userID, 'Error al ejecutar el INSERT del pago: '.$e->getMessage(), "error");
+            logToFile('User', 'userID', 'Error al ejecutar el INSERT del pago: '.$e->getMessage(), "error");
             exit;
         }
 
@@ -949,9 +987,9 @@ try {
             $pdfBase64 = leerXML($ruta, true, $id);
             if (!$pdfBase64) {
                 throw new Exception('Error al leer el XML y generar el PDF en base64.');
-                logToFile($username, $userID, 'Error al leer el xml del pago realizado', "error", $data_string);
+                logToFile('User', 'userID', 'Error al leer el xml del pago realizado', "error", $data_string);
             }
-            logToFile($username, $userID, 'Se creó correctamente el pdf del pago realizado', "success", $data_string);
+            logToFile('User', 'userID', 'Se creó correctamente el pdf del pago realizado', "success", $data_string);
             echo json_encode([
                 'status' => 'success',
                 'pdf' => $pdfBase64,
@@ -963,7 +1001,7 @@ try {
                 'status' => 'error',
                 'message' => $e->getMessage()
             ]);
-            logToFile($username, $userID, 'Error al leer el xml del pago realizado: '.$e->getMessage(), "error", $data_string);
+            logToFile('User', 'userID', 'Error al leer el xml del pago realizado: '.$e->getMessage(), "error", $data_string);
             exit;
         }
     } else {
@@ -973,13 +1011,13 @@ try {
             'content' => $content,
             'cuerpo' => $data,
         ]);
-        logToFile($username, $userID, 'Intento de pago, datos de facturacion incorrectos.', "error", $data_string);
+        logToFile('User', 'userID', 'Intento de pago, datos de facturacion incorrectos.', "error", $data_string);
         exit;
     }
 } catch (Exception $e) {
     $errorMessage = 'Error en la solicitud de la factura: ' . $e->getMessage();
     echo json_encode([ 'status' => 'error', 'message' => $errorMessage, 'data' => $data, ]);
-    logToFile($username, $userID, $errorMessage . ' -- ' . json_encode($data), "error", $data_string);
+    logToFile('User', 'userID', $errorMessage . ' -- ' . json_encode($data), "error", $data_string);
     exit;
 }
 

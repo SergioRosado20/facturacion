@@ -6,6 +6,7 @@ header('Content-Type: application/json');
 
 require_once 'vendor/autoload.php';
 require_once "cors.php";
+require_once "log_helper.php";
 cors();
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
@@ -25,11 +26,14 @@ if($con->connect_error) {
 $json = file_get_contents('php://input');
 $data = json_decode($json, true);
 
+logToFile('', '', 'Datos recibidos para obtener facturas: '.$json, "success", $json);
+
 $id = isset($data["id"]) ? $data["id"] : null;
 $data_inner = isset($data['data']) ? $data['data'] : null; // Cambié la variable a $data_inner para evitar la sobrescritura
 $cant = isset($data['cant']) ? intval($data['cant']) : null;
 $page = isset($data['page']) ? intval($data['page']) : 1;
 $canceladas = isset($data['canceladas']) ? filter_var($data['canceladas'], FILTER_VALIDATE_BOOLEAN) : null; // Usa filter_var para asegurar que sea booleano
+$vigentes = isset($data['vigentes']) ? filter_var($data['vigentes'], FILTER_VALIDATE_BOOLEAN) : null; 
 $ppd = isset($data['ppd']) ? filter_var($data['ppd'], FILTER_VALIDATE_BOOLEAN) : null; // Usa filter_var para asegurar que sea booleano
 //print_r('Canceladas: '.$canceladas);
 //print_r('cant: '.$cant);
@@ -41,9 +45,10 @@ if($cant !== null) {
     $offsetSql = '';
 }
 
-$whereClause = '';
-$whereClause .= $canceladas ? " status != 1" : " 1";
+$whereClause = ' 1 ';
+$whereClause .= $canceladas ? " AND status != 1" : null;
 $whereClause .= $ppd ? " AND metodoPago = 'PPD'" : null;
+$whereClause .= $vigentes ? " AND status = 1" : null;
 
 $sql_count = "SELECT COUNT(*) as total FROM facturas WHERE $whereClause";
 $stmt_count = $con->prepare($sql_count);
@@ -134,6 +139,7 @@ echo json_encode([
     'data' => $facturas,
     //'sql' => $sql,
     'canceladas' => $canceladas,
+    'sql' => $sql
 ]);
 
 $con->close();

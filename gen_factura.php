@@ -406,7 +406,7 @@ try {
             $data['Encabezado']['cfdIsRelacionados'] = $uuidRelacionado;
     }
 
-    $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
+    $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
             'accept' => 'application/json',
@@ -422,7 +422,7 @@ try {
     //echo $content;
 
     if ($codigo == '000') {
-        logToFile($username, $userID, 'Se generó correctamente la factura', "success", json_encode($data));
+        logToFile($username, $userID, 'Se generó correctamente la factura', "success");
         // Generar el XML y PDF base64
         try {
             $xml = $content['cfdiTimbrado']['respuesta']['cfdixml'];

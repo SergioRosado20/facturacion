@@ -303,9 +303,9 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
                         $concepto['Base'] = $totalTrasladosBaseIVA16;
                         $concepto['ImporteImpuesto'] = $totalTrasladosImpuestoIVA16;
                         $concepto['Impuesto'] = $totalTrasladosImpuestoIVA16;
-                        $concepto['Importe'] = $montoTotalPagos;
-                        $concepto['ImporteImpuestoTrasladado'] = $totalTrasladosImpuestoIVA16;
-                        $concepto['ImporteImpuestoRetenido'] = $totalRetencionesIVA + $totalRetencionesISR + $totalRetencionesIEPS;
+                        $concepto['Importe'] = floatval($montoTotalPagos);
+                        $concepto['ImporteImpuestoTrasladado'] = floatval($totalTrasladosImpuestoIVA16);
+                        $concepto['ImporteImpuestoRetenido'] = floatval($totalRetencionesIVA) + floatval($totalRetencionesISR) + floatval($totalRetencionesIEPS);
                     }
                 }
                 if($factura['SubTotal'] == '0'){
@@ -328,9 +328,22 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
                 'SelloSAT' => (string) $complemento[0]['SelloSAT']
             ];
 
+            $docsRelacionados = $xml->xpath('//cfdi:CfdiRelacionados');
+            if (!empty($docsRelacionados)) {
+                $factura['DocsRelacionados']['TipoRelacion'] = (string) $docsRelacionados[0]['TipoRelacion'];
+                // Impuestos retenidos
+                $relacionados = $xml->xpath('//cfdi:CfdiRelacionados/cfdi:CfdiRelacionado');
+                foreach($relacionados as $relacionado) {
+                    $factura['DocsRelacionados']['Doc'][] = [
+                        'UUID' => (string) $relacionado['UUID']
+                    ];
+                }
+            }
+
             // Retornar la factura organizada en un array
-            //print_r($factura);
             //unlink($nombreArchivoXml); // Asegúrate de que esto es lo que deseas hacer
+            
+            //print_r($factura);
 
             if($pdf) {
                 if ($id === null) {
@@ -567,6 +580,80 @@ function generarPDF($array, $id) {
             $height += $h;
             return $height;
         }
+
+        function RelacionadosTable($data) {
+            // Definir los anchos de las columnas
+            $widths = array(100); // Ajusta los valores de ancho según las necesidades
+            
+            // Cabecera
+            $this->SetFont('Arial', 'B', 7);
+            $this->SetFillColor(200, 200, 200);
+            
+            $this->Cell(120, 10, safe_sutf8_decode('Documentos Relacionados'), 1, 0, 'C', true);
+            $this->Cell(70, 10, safe_sutf8_decode('Tipo de Relación'), 1, 0, 'C', true);
+            
+            $this->Ln();
+        
+            // Datos
+            $this->SetFont('Arial', '', 8);
+        
+            foreach ($data['Doc'] as $row) {
+        
+                $maxHeight = 0;
+
+                // Iterar sobre cada columna nuevamente para dibujar las celdas con la altura máxima calculada
+                $this->SetX(10);
+                foreach ($row as $doc) {
+                    switch($data['TipoRelacion']) {
+                        case '01':
+                            $tipoRelacion = '01 - Nota de crédito de los documentos relacionados';
+                            break;
+                        case '02':
+                            $tipoRelacion = '02 - Nota de débito de los documentos relacionados';
+                            break;
+                        case '03':
+                            $tipoRelacion = '03 - Devolución de mercancía sobre facturas o traslados previos';
+                            break;
+                        case '04':
+                            $tipoRelacion = '04 - Sustitución de los CFDI previos';
+                            break;
+                        case '05':
+                            $tipoRelacion = '05 - Traslados de mercancías facturados previamente';
+                            break;
+                        case '06':
+                            $tipoRelacion = '06 - Factura generada por los traslados previos';
+                            break;
+                        case '07':
+                            $tipoRelacion = '07 - CFDI por aplicación de anticipo';
+                            break;
+                            
+                    }
+
+                    $textHeight = $this->GetMultiCellHeight(70, 6, safe_sutf8_decode($tipoRelacion));
+                    // Obtener la altura máxima entre las celdas
+                    $maxHeight = max($maxHeight, $textHeight);
+
+                    $x = $this->GetX();
+                    $y = $this->GetY();
+                    
+                    // Dibujar MultiCell y luego un borde alrededor de la celda con la altura máxima
+                    $this->MultiCell(120, 6, safe_sutf8_decode($doc), 0, 'C');
+                    $this->Rect($x, $y, 120, $maxHeight); // Dibuja el borde ajustado a la altura máxima
+                    $this->SetXY($x + 120, $y); // Ajustar la posición para la siguiente celda
+
+                    $x = $this->GetX();
+                    $y = $this->GetY();
+                    $this->MultiCell(70, 6, safe_sutf8_decode($tipoRelacion), 0, 'C');
+                    $this->Rect($x, $y, 70, $maxHeight); // Dibuja el borde ajustado a la altura máxima
+
+                    
+                    $this->SetXY($x + 70, $y); // Ajustar la posición para la siguiente celda
+                }
+        
+                // Después de procesar la fila, mover el cursor a la siguiente línea
+                $this->Ln($maxHeight);
+            }
+        }
     }
 
     function safe_sutf8_decode($string) {
@@ -575,6 +662,7 @@ function generarPDF($array, $id) {
 
     $Emisor = $array['Emisor'];
     $Receptor = $array['Receptor'];
+    $DocsRelacionados = $array['DocsRelacionados'];
     // Fecha original en formato ISO 8601
     $fechaOriginal = $array['Fecha'];
     $date = new DateTime($fechaOriginal);
@@ -868,6 +956,8 @@ function generarPDF($array, $id) {
     $data = [];
 
     $descuentos = 0;
+    $totalImpuestosTrasladados = 0;
+    $totalImpuestosRetenidos = 0;
     // Bucle para llenar el array data con los conceptos
     foreach ($array['Conceptos'] as $concepto) {
         $cantidad = $concepto['Cantidad'];
@@ -890,6 +980,9 @@ function generarPDF($array, $id) {
 
         // Agregar los datos del concepto al array data
         $data[] = [$cantidad, $claveUnidad, $claveProdServ, $descripcion, $valorUnitario, $descuento, $impuestosTrasladados, $impuestosRetenidos, $importe];
+
+        $totalImpuestosTrasladados = floatval($totalImpuestosTrasladados) + floatval($concepto['ImporteImpuestoTrasladado']);
+        $totalImpuestosRetenidos = floatval($totalImpuestosRetenidos) + floatval($concepto['ImporteImpuestoRetenido']);
     }
 
     function numeroALetras($numero) {
@@ -1008,7 +1101,7 @@ function generarPDF($array, $id) {
     $pdf->SetXY(100,30);
     $pdf->Cell(100,10,'Folio: '.$id,0,1, 'C');
     $pdf->SetXY(100,35);
-    $pdf->Cell(100,10,'Fecha: '.$fechaFinal,0,1, 'C');
+    $pdf->Cell(100,10,'Fecha de Expedicion: '.$fechaFinal,0,1, 'C');
     $pdf->SetXY(100,40);
     $pdf->Cell(100,10,'Lugar de Expedicion (CP): '.$array['LugarExpedicion'],0,1, 'C');
     $pdf->SetXY(100,45);
@@ -1060,9 +1153,6 @@ function generarPDF($array, $id) {
     $pdf->SetFont('Arial', '', 8);
     $pdf->MultiCell(90, 5, safe_sutf8_decode(numeroALetras($array['Total'])), 0, 'L');
 
-    //print_r($array['TotalImpuestos']);
-    $totalImpuestosTrasladados = $array['TotalImpuestosTrasladados'];
-    $totalImpuestosRetenidos = $array['TotalImpuestosRetenidos'];
     
     $subtotal = isset($array['SubTotal']) && is_numeric($array['SubTotal']) ? (float)$array['SubTotal'] : $array['Total'];
 
@@ -1096,6 +1186,15 @@ function generarPDF($array, $id) {
 
     $y = $pdf->GetY();
     $y = $y+10;
+
+    if(isset($DocsRelacionados) && !empty($DocsRelacionados)) {
+        $pdf->RelacionadosTable($DocsRelacionados);
+
+        $pdf->Ln(10);
+
+        $y = $pdf->GetY();
+        $y = $y+10;
+    }
 
     if(isset($array['Complemento'])) {
         // Añadir QR
