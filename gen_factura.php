@@ -3,7 +3,7 @@
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
 require 'pdf.php';
-require 'log_helper.php';
+require_once 'log_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();
@@ -69,6 +69,7 @@ if ($data_string === false) {
 }
 
 if (isset($data['cuerpo'])) {
+    $cuenta = $data['cuerpo']['cuenta'];
     $uuidRelacionado = isset($data['cuerpo']['uuidRelacionado']) ? $data['cuerpo']['uuidRelacionado'] : null;
     $relacion = isset($data['cuerpo']['RelacionCfdi']) ? $data['cuerpo']['RelacionCfdi'] : null;
     $comprobante = $data['cuerpo']['Comprobante'];
@@ -127,7 +128,7 @@ try {
 }
 
 try {
-    $sql = "SELECT * FROM `cuenta_factura` ORDER BY `id` DESC LIMIT 1";
+    $sql = "SELECT * FROM `cuenta_factura` WHERE `id` = $cuenta";
 
     // Ejecutar la consulta (puedes usar tu conexión y método habitual)
     $stmt = $con->prepare($sql);

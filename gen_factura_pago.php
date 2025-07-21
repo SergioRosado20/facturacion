@@ -3,7 +3,7 @@
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
 require 'pdf.php';
-require 'log_helper.php';
+require_once 'log_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();

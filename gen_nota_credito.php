@@ -3,7 +3,7 @@
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
 require 'pdf.php';
-require 'log_helper.php';
+require_once 'log_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();
@@ -36,6 +36,7 @@ $descuento = isset($data['descuento']) ? $data['descuento'] : null; // Acceder a
 $descuento = (float)$descuento;
 // Obtener los IDs de la cadena del GET, y convertirlos en un array
 $idFactura = $data['id_factura'];
+$cuenta = $data['cuenta'];
 ///////////////////////////////////////////////////////////////////// INICIA ZONA DE CONSUTLAS Y CÁLCULOS
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->load();
@@ -47,6 +48,24 @@ $database_name = $_ENV['DATABASE_NAME'] ?? '';
 $enc_key = $_ENV['ENCRYPT_KEY'] ?? '';
 
 $con = new mysqli($database_host, $database_user, $database_password, $database_name);
+$con->set_charset("utf8mb4");
+
+function limpiarUtf8($input) {
+    if (is_array($input)) {
+        foreach ($input as $key => $value) {
+            $input[$key] = limpiarUtf8($value); // llamada recursiva
+        }
+    } elseif (is_string($input)) {
+        // Solo si no está codificado en UTF-8
+        if (!mb_check_encoding($input, 'UTF-8')) {
+            $input = mb_convert_encoding($input, 'UTF-8', 'ISO-8859-1');
+        }
+    } // Si no es string ni array (es int, float, bool, null, etc), lo deja tal cual
+
+    //print_r('Campo: '.$key.' - Valor: '.$input);
+    //echo nl2br('Campo: '.$key.' - Valor: '.$input.'\n');
+    return $input;
+}
 
 if ($con->connect_error) {
     echo json_encode([
@@ -230,10 +249,11 @@ if (empty($token)) {
 }
 
 try {
-    $sql = "SELECT * FROM `cuenta_factura` ORDER BY `id` DESC LIMIT 1";
+    $sql = "SELECT * FROM `cuenta_factura` WHERE id = ?";
 
     // Ejecutar la consulta (puedes usar tu conexión y método habitual)
     $stmt = $con->prepare($sql);
+    $stmt->bind_param("i", $cuenta);
     $stmt->execute();
     // Obtener el resultado
     $result = $stmt->get_result();

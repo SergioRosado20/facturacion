@@ -6,7 +6,14 @@ header('Content-Type: application/json');
 
 require_once 'vendor/autoload.php';
 require_once "cors.php";
-cors();
+
+// Debug: Verificar que cors.php se cargó
+if (function_exists('cors')) {
+    error_log("Función cors() encontrada");
+    cors();
+} else {
+    error_log("ERROR: Función cors() NO encontrada");
+}
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->load();

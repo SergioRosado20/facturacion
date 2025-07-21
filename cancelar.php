@@ -1,6 +1,6 @@
 <?php
 require 'pdf.php';
-require 'log_helper.php';
+require_once 'log_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();
@@ -132,7 +132,7 @@ if($factura_id) {
         $rfcEmisor = $data['Emisor']['Rfc'];
         $rfcReceptor = $data['Receptor']['Rfc'];
         $uuid = $data['Complemento']['UUID'];
-        $sello = $data['Complemento']['SelloCFD'];
+        $sello = substr($data['Complemento']['SelloCFD'], -8);
 
         // Leer y codificar los archivos
         try {
@@ -201,7 +201,7 @@ if($factura_id) {
 
         logToFile('', 'Cancelar', json_encode($body, true), "success");
 
-        $resCancelacion = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/cancelar/csd', [
+        $resCancelacion = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/cancelar/csd', [
             'body' => json_encode($body),
             'headers' => [
                 'accept' => 'application/json',

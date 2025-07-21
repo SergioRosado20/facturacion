@@ -12,6 +12,7 @@ use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\PngWriter;
 use Endroid\QrCode\Color\Color;
 require_once "cors.php";
+require_once "log_helper.php";
 cors();
 
 $data = json_decode(file_get_contents('php://input'), true);
@@ -27,6 +28,16 @@ if($_GET['preview'] && $data) {
         exit;
     } else {
         echo 'Error: No se pudo generar el PDF.';
+    }
+}
+
+function convert_to_utf8($data) {
+    if (is_array($data)) {
+        return array_map('convert_to_utf8', $data);
+    } elseif (is_string($data)) {
+        return mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+    } else {
+        return $data;
     }
 }
 
@@ -318,6 +329,43 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null) {
             
 
             // Complemento (Timbre Fiscal Digital)
+            $pagos = $xml->xpath('//cfdi:Complemento/pago20:Pagos');
+            if (!empty($pagos)) {
+                $totales = $pagos[0]->xpath('//pago20:Totales');
+                $pagosArray = $pagos[0]->xpath('//pago20:Pago');
+                
+                $factura['Pagos'] = [
+                    'MontoTotalPagos' => (string) $totales[0]['MontoTotalPagos'],
+                    'FechaPago' => (string) $pagosArray[0]['FechaPago'],
+                    'FormaDePagoP' => (string) $pagosArray[0]['FormaDePagoP'],
+                    'MonedaP' => (string) $pagosArray[0]['MonedaP'],
+                    'TipoCambioP' => (string) $pagosArray[0]['TipoCambioP'],
+                    'Monto' => (string) $pagosArray[0]['Monto']
+                ];
+                
+                // Bucle para obtener cada pago
+                foreach ($pagosArray as $pago) {
+                    $documentosRelacionados = $pago->xpath('./pago20:DoctoRelacionado');
+                    $documentos = [];
+                    
+                    // Bucle para obtener cada documento relacionado del pago
+                    foreach ($documentosRelacionados as $docRelacionado) {
+                        $documentos[] = [
+                            'IdDocumento' => (string) $docRelacionado['IdDocumento'],
+                            'MonedaDR' => (string) $docRelacionado['MonedaDR'],
+                            'EquivalenciaDR' => (string) $docRelacionado['EquivalenciaDR'],
+                            'NumParcialidad' => (string) $docRelacionado['NumParcialidad'],
+                            'ImpSaldoAnt' => (string) $docRelacionado['ImpSaldoAnt'],
+                            'ImpPagado' => (string) $docRelacionado['ImpPagado'],
+                            'ImpSaldoInsoluto' => (string) $docRelacionado['ImpSaldoInsoluto'],
+                            'ObjetoImpDR' => (string) $docRelacionado['ObjetoImpDR']
+                        ];
+                    }
+                    
+                    $factura['Pagos']['DocumentosRelacionados'] = $documentos;
+                }
+            }
+
             $complemento = $xml->xpath('//cfdi:Complemento/tfd:TimbreFiscalDigital');
             $factura['Complemento'] = [
                 'UUID' => (string) $complemento[0]['UUID'],
@@ -392,7 +440,7 @@ function arrayPdf($data) {
         } else {
             echo json_encode([
                 'status' => 'error',
-                'message' => 'No se encontró ningún registro en la tabla token.',
+                'message' => 'No se encontró ningún registro en la tabla cuenta_factura.',
             ]);
         }
     } catch (\Exception $e) {
@@ -442,8 +490,8 @@ function generarPDF($array, $id) {
                     die("Error: No se pudo obtener información de la imagen.");
                 }*/
                 // Logo
-                if (file_exists('assets/logo.png')) {
-                    $this->Image('assets/logo.png', 10, 1, 80, 50);
+                if (file_exists('assets/logoZN.png')) {
+                    $this->Image('assets/logoZN.png', 10, 1, 40, 40);
                 }
                 // Arial bold 15
                 $this->SetFont('Arial', 'B', 12);
@@ -649,6 +697,59 @@ function generarPDF($array, $id) {
                     
                     $this->SetXY($x + 70, $y); // Ajustar la posición para la siguiente celda
                 }
+        
+                // Después de procesar la fila, mover el cursor a la siguiente línea
+                $this->Ln($maxHeight);
+            }
+        }
+
+        function PagosTable($data) {
+            logToFile($username, $userID, 'Se Recibe info de pagos', "success", json_encode($data));
+            // Definir los anchos de las columnas
+            $widths = array(100); // Ajusta los valores de ancho según las necesidades
+            
+            // Cabecera
+            $this->SetFont('Arial', 'B', 7);
+            $this->SetFillColor(200, 200, 200);
+            
+            $this->Cell(120, 10, safe_sutf8_decode('Documentos Relacionados'), 1, 0, 'C', true);
+            $this->Cell(70, 10, safe_sutf8_decode('Monto'), 1, 0, 'C', true);
+            
+            $this->Ln();
+        
+            // Datos
+            $this->SetFont('Arial', '', 8);
+        
+            //print_r($data);
+            foreach ($data['DocumentosRelacionados'] as $row) {
+        
+                logToFile($username, $userID, 'Cada fila de pagos', "success", json_encode($row));
+                $maxHeight = 0;
+
+                // Iterar sobre cada columna nuevamente para dibujar las celdas con la altura máxima calculada
+                $this->SetX(10);
+                
+
+                $textHeight = $this->GetMultiCellHeight(120, 6, safe_sutf8_decode($row['IdDocumento']));
+                // Obtener la altura máxima entre las celdas
+                $maxHeight = max($maxHeight, $textHeight);
+
+                $x = $this->GetX();
+                $y = $this->GetY();
+                
+                // Dibujar MultiCell y luego un borde alrededor de la celda con la altura máxima
+                $this->MultiCell(120, 6, safe_sutf8_decode($row['IdDocumento']), 0, 'C');
+                $this->Rect($x, $y, 120, $maxHeight); // Dibuja el borde ajustado a la altura máxima
+                $this->SetXY($x + 120, $y); // Ajustar la posición para la siguiente celda
+
+                $x = $this->GetX();
+                $y = $this->GetY();
+                $this->MultiCell(70, 6, safe_sutf8_decode($row['ImpPagado']), 0, 'C');
+                $this->Rect($x, $y, 70, $maxHeight); // Dibuja el borde ajustado a la altura máxima
+
+                
+                $this->SetXY($x + 70, $y); // Ajustar la posición para la siguiente celda
+                
         
                 // Después de procesar la fila, mover el cursor a la siguiente línea
                 $this->Ln($maxHeight);
@@ -1118,9 +1219,9 @@ function generarPDF($array, $id) {
     $pdf->Cell(0,10,'Emisor:',0,1);
     $pdf->SetFont('Arial','',10);
     $pdf->SetXY(10,45);
-    $pdf->Cell(0,10, $Emisor['Nombre'],0,1);
+    $pdf->Cell(0,10, safe_sutf8_decode($Emisor['Nombre']),0,1);
     $pdf->SetXY(10,50);
-    $pdf->Cell(0,10,'RFC: '.$Emisor['Rfc'],0,1);
+    $pdf->Cell(0,10,'RFC: '. safe_sutf8_decode($Emisor['Rfc']),0,1);
     $pdf->SetXY(10,55);
     $pdf->Cell(0,10,'Regimen Fiscal: '.safe_sutf8_decode(regFiscal($Emisor['RegimenFiscal'])),0,1);
     $pdf->Ln(10);
@@ -1133,7 +1234,7 @@ function generarPDF($array, $id) {
     $pdf->SetXY(10,70);
     $pdf->Cell(0,10,'Cliente: '.safe_sutf8_decode($Receptor['Nombre']),0,1);
     $pdf->SetXY(10,75);
-    $pdf->Cell(0,10,'RFC: '.$Receptor['Rfc'],0,1);
+    $pdf->Cell(0,10,'RFC: '. safe_sutf8_decode($Receptor['Rfc']),0,1);
     $pdf->SetXY(10,80);
     $pdf->Cell(0,10,'Regimen Fiscal: '.safe_sutf8_decode(regFiscal($Receptor['RegimenFiscalReceptor'])),0,1);
     $pdf->SetXY(10,85);
@@ -1192,6 +1293,14 @@ function generarPDF($array, $id) {
 
         $pdf->Ln(10);
 
+        $y = $pdf->GetY();
+        $y = $y+10;
+    }
+
+    if(isset($array['Pagos']) && !empty($array['Pagos'])) {
+        logToFile($username, $userID, 'Se envia a la tabla de pagos', "success", json_encode($array['Pagos']));
+        $pdf->PagosTable($array['Pagos']);
+        $pdf->Ln(10);
         $y = $pdf->GetY();
         $y = $y+10;
     }

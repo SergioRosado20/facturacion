@@ -3,7 +3,7 @@
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
 require 'pdf.php';
-require 'log_helper.php';
+require_once 'log_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();
@@ -76,6 +76,7 @@ $facturas = $data['facturas'];
 $importePagado = $data['importe_pagado'];
 $moneda = $data['moneda'];
 $cambio = $data['cambio'];
+$cuenta = $data['cuenta'];
 
 if ($con->connect_error) {
     echo json_encode([
@@ -247,10 +248,11 @@ if (empty($token)) {
 }
 
 try {
-    $sql = "SELECT * FROM `cuenta_factura` ORDER BY `id` DESC LIMIT 1";
+    $sql = "SELECT * FROM `cuenta_factura` WHERE id = ?";
 
     // Ejecutar la consulta (puedes usar tu conexión y método habitual)
     $stmt = $con->prepare($sql);
+    $stmt->bind_param("i", $cuenta);
     $stmt->execute();
     // Obtener el resultado
     $result = $stmt->get_result();
@@ -865,7 +867,7 @@ try {
     //var_dump($data);
     //print_r($fechaExpedicion);
     //print_r($facturasInfo);
-    $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
+    $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
             'accept' => 'application/json',

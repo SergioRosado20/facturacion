@@ -6,6 +6,7 @@ header('Content-Type: application/json');
 
 require_once 'vendor/autoload.php';
 require_once "cors.php";
+require_once "log_helper.php";
 cors();
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
@@ -17,6 +18,7 @@ $database_password = $_ENV['DATABASE_PASSWORD'] ?? '';
 $database_name = $_ENV['DATABASE_NAME'] ?? '';
 
 $con = new mysqli($database_host, $database_user, $database_password, $database_name);
+$con->set_charset("utf8");
 
 if($con->connect_error) {
     die("Coneccion fallida: " . $con->connect_error);

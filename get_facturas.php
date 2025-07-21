@@ -62,18 +62,23 @@ $row = $resultado_count->fetch_assoc();
 
 $total_registros = $row['total'];
 
-$sql = "SELECT facturas.*, facturas.pedidos, facturas.id as fac_id, facturas.cliente as fac_cliente, cancelaciones.id as cancel_id, cancelaciones.esCancelable, cancelaciones.estado, cancelaciones.estatusCancelacion, cancelaciones.fecha_creacion as fecha_cancelacion,
+/*SELECT facturas.*, facturas.pedidos, facturas.id as fac_id, facturas.cliente as fac_cliente, cancelaciones.id as cancel_id, cancelaciones.esCancelable, cancelaciones.estado, cancelaciones.estatusCancelacion, cancelaciones.fecha_creacion as fecha_cancelacion,
             COALESCE(company.name, 'Factura de mantenimiento') AS nombre,
             company.id as client_id
         FROM facturas 
         LEFT JOIN company ON facturas.cliente = company.id
+        LEFT JOIN cancelaciones ON facturas.id = cancelaciones.folio
+        WHERE $whereClause*/
+$sql = "SELECT facturas.*, facturas.pedidos, facturas.id as fac_id, facturas.cliente as fac_cliente, cancelaciones.id as cancel_id, cancelaciones.esCancelable, cancelaciones.estado, cancelaciones.estatusCancelacion, cancelaciones.fecha_creacion as fecha_cancelacion,
+            COALESCE(facturas.cliente, 'Factura de mantenimiento') AS nombre
+        FROM facturas 
         LEFT JOIN cancelaciones ON facturas.id = cancelaciones.folio
         WHERE $whereClause";
 if($id !== null) {
     $sql .= " AND facturas.id = '". $con->real_escape_string($id) ."'";
 }
 if ($data_inner !== null) {
-    $sql .= ' AND (facturas.id LIKE "%' . $con->real_escape_string($data_inner) . '%" OR facturas.cliente LIKE "%' . $con->real_escape_string($data_inner) . '%" OR company.name LIKE "%' . $con->real_escape_string($data_inner) . '%" OR facturas.uuid LIKE "%' . $con->real_escape_string($data_inner) . '%")';
+    $sql .= ' AND (facturas.id LIKE "%' . $con->real_escape_string($data_inner) . '%" OR facturas.cliente LIKE "%' . $con->real_escape_string($data_inner) . '%" OR facturas.uuid LIKE "%' . $con->real_escape_string($data_inner) . '%")';
 }
 
 $order = $canceladas ? " ORDER BY cancelaciones.id ASC ". $offsetSql : " ORDER BY facturas.id ASC ". $offsetSql;
@@ -100,7 +105,7 @@ if ($resultado === false) {
 while ($row = $resultado->fetch_assoc()) {
     // Separar los datos del cliente en un subarray
     $cliente = [
-        'client_id' => $row['client_id'],
+        //'client_id' => $row['client_id'],
         'nombre' => $row['nombre'],
         'cliente' => $row['fac_cliente'],
     ];
@@ -139,7 +144,7 @@ echo json_encode([
     'data' => $facturas,
     //'sql' => $sql,
     'canceladas' => $canceladas,
-    'sql' => $sql
+    //'sql' => $sql
 ]);
 
 $con->close();

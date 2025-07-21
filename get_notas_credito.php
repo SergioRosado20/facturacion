@@ -6,6 +6,7 @@ header('Content-Type: application/json');
 
 require_once 'vendor/autoload.php';
 require_once "cors.php";
+require_once "log_helper.php";
 cors();
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
@@ -17,6 +18,24 @@ $database_password = $_ENV['DATABASE_PASSWORD'] ?? '';
 $database_name = $_ENV['DATABASE_NAME'] ?? '';
 
 $con = new mysqli($database_host, $database_user, $database_password, $database_name);
+$con->set_charset("utf8mb4");
+
+function limpiarUtf8($input) {
+    if (is_array($input)) {
+        foreach ($input as $key => $value) {
+            $input[$key] = limpiarUtf8($value); // llamada recursiva
+        }
+    } elseif (is_string($input)) {
+        // Solo si no está codificado en UTF-8
+        if (!mb_check_encoding($input, 'UTF-8')) {
+            $input = mb_convert_encoding($input, 'UTF-8', 'ISO-8859-1');
+        }
+    } // Si no es string ni array (es int, float, bool, null, etc), lo deja tal cual
+
+    //print_r('Campo: '.$key.' - Valor: '.$input);
+    //echo nl2br('Campo: '.$key.' - Valor: '.$input.'\n');
+    return $input;
+}
 
 if($con->connect_error) {
     die("Coneccion fallida: " . $con->connect_error);
@@ -30,6 +49,7 @@ $cant = isset($data['cant']) ? intval($data['cant']) : 10;
 $page = isset($data['page']) ? intval($data['page']) : 1;
 $data_inner = isset($data['data']) ? $data['data'] : null;
 
+logToFile('0', '0', 'Datos recibidos get_notas_credito:', json_encode($data, JSON_PRETTY_PRINT));
 $offset = ($page - 1) * $cant;
 $whereClause = ' 1 ';
 
@@ -45,7 +65,7 @@ $row = $resultado_count->fetch_assoc();
 
 $total_registros = $row['total'];
 
-$sql = "SELECT notas_pagos.*, notas_pagos.uuid as uuidNota, notas_pagos.fecha as fechaNota, facturas.*, facturas.uuid as uuidFactura, facturas.fecha as fechaFactura
+$sql = "SELECT notas_pagos.*, notas_pagos.uuid as uuidNota, notas_pagos.fecha as fechaNota, notas_pagos.rutaXml as notaXml, facturas.*, facturas.uuid as uuidFactura, facturas.fecha as fechaFactura
         FROM notas_pagos
         INNER JOIN facturas ON notas_pagos.idFactura = facturas.id
         WHERE $whereClause";
@@ -69,7 +89,7 @@ $stmt->bind_param("ii", $cant, $offset);
 // Ejecutar la consulta
 $stmt->execute();
 $resultado = $stmt->get_result();
-
+logToFile('0', '0', 'Resultado get_notas_credito:', json_encode($resultado, JSON_PRETTY_PRINT));
 $facturas = array();
 $array = array('sql' => $sql);
 
@@ -92,17 +112,20 @@ while ($row = $resultado->fetch_assoc()) {
     $facturas[] = $row;
 }
 
+logToFile('0', '0', 'Respuesta get_notas_credito:', json_encode($facturas, JSON_PRETTY_PRINT));
 
 // Convertir el array de facturas en formato JSON y mostrarlo
 $totalPages = ceil($total_registros / $cant);
 
-echo json_encode([
+$response = [
     'total_registros' => $total_registros,
     'total_pages' => $totalPages,
     'rows' => $resultado->num_rows,
     'data' => $facturas,
     //'sql' => $sql,
-]);
+];
+logToFile('0', '0', 'Respuesta get_notas_credito:', json_encode($response, JSON_PRETTY_PRINT));
+echo json_encode($response);
 
 $con->close();
 ?>

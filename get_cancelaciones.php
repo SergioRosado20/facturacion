@@ -33,12 +33,23 @@ function convert_to_utf8($dataRaw) {
     }
 }
 
-$id = isset($_POST["id"]) ? $_POST["id"] : null;
-$data = isset($_POST['data']) ? $_POST['data'] : null;
-$cant = isset($_POST['cant']) ? intval($_POST['cant']) : 10;
-$page = isset($_POST['page']) ? intval($_POST['page']) : 1;
+$json = file_get_contents('php://input');
+$data = json_decode($json, true);
+//print_r('Data: '.$json);
 
-$offset = ($page - 1) * $cant;
+$id = isset($data["id"]) ? $data["id"] : null;
+$dataInner = isset($data['data']) ? $data['data'] : null;
+$cant = isset($data['cant']) ? intval($data['cant']) : null;
+$page = isset($data['page']) ? intval($data['page']) : null;
+
+//print_r('Cant: '.$cant);
+//print_r('Page: '.$page);
+if($cant !== null) {
+    $offset = ($page - 1) * $cant;
+    $offsetSql = 'LIMIT '.$cant.' OFFSET '.$offset;
+} else {
+    $offsetSql = '';
+}
 
 $sql_count = "SELECT COUNT(*) as total FROM cancelaciones WHERE 1";
 $stmt_count = $con->prepare($sql_count);
@@ -79,11 +90,10 @@ $sql = "SELECT cancelaciones.*, cancelaciones.folio as folioFac, cancelaciones.p
 if($id !== null) {
     $sql .= " AND cancelaciones.id = '". $con->real_escape_string($id) ."'";
 }
-if ($data !== null && $data !== '') {
-    $sql .= ' AND (cancelaciones.id LIKE "%' . $con->real_escape_string($data) . '%" OR clientes_frec.nombre LIKE "%' . $con->real_escape_string($data) . '%")';
+if ($dataInner !== null && $dataInner !== '') {
+    $sql .= ' AND (cancelaciones.id LIKE "%' . $con->real_escape_string($dataInner) . '%" OR clientes_frec.nombre LIKE "%' . $con->real_escape_string($dataInner) . '%")';
 }
-$sql .= " ORDER BY cancelaciones.id ASC
-        LIMIT ? OFFSET ?";
+$sql .= " ORDER BY cancelaciones.id ASC ". $offsetSql;
 
 //print_r($sql);
 // Preparar la consulta para evitar inyecciones SQL
@@ -91,9 +101,6 @@ $stmt = $con->prepare($sql);
 if (!$stmt) {
     die("Error en la preparación de la consulta: " . $con->error);
 }
-
-// Enlazar parámetros
-$stmt->bind_param("ii", $cant, $offset);
 
 // Ejecutar la consulta
 $stmt->execute();

@@ -11,17 +11,26 @@
  *
  */
 function cors() {
+    // Debug: Log para verificar que la función se ejecuta
+    error_log("Función cors() ejecutándose");
+    
     // Allow from any origin
     if (isset($_SERVER['HTTP_ORIGIN'])) {
+        error_log("Origin detectado: " . $_SERVER['HTTP_ORIGIN']);
         // Decide if the origin in $_SERVER['HTTP_ORIGIN'] is one
         // you want to allow, and if so:
         header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
         header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Max-Age: 86400');    // cache for 1 day
+    } else {
+        error_log("No se detectó HTTP_ORIGIN");
+        // Fallback para desarrollo local
+        header("Access-Control-Allow-Origin: *");
     }
 
     // Access-Control headers are received during OPTIONS requests
     if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+        error_log("Request OPTIONS detectado");
 
         if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD']))
             // may also be using PUT, PATCH, HEAD etc
@@ -32,4 +41,6 @@ function cors() {
 
         exit(0);
     }
+    
+    error_log("CORS headers configurados correctamente");
 }
