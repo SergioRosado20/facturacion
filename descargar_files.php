@@ -5,7 +5,7 @@ error_reporting(E_ALL);
 header('Content-Type: application/json');
 // Incluir el archivo de la función CORS
 include 'cors.php';
-include 'pdf.php';
+include 'pdfFinezza.php';
 cors();
 
 $json = file_get_contents('php://input');

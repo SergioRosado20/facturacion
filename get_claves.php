@@ -30,19 +30,37 @@ $tabla = isset($data["tabla"]) ? $data["tabla"] : null;
 
 $tablasPermitidas = ['claves_unidad', 'claves_ps']; // Agrega aquí otras tablas válidas
 if (!in_array($tabla, $tablasPermitidas)) {
-    die(json_encode(["error" => "Tabla no permitida."]));
+    die(json_encode(["error" => "Tabla no permitida.", "tabla" => $tabla, "data" => $data, "json" => $json]));
 }
 
 $termino = "%" . $con->real_escape_string($termino) . "%"; // Para LIKE
 
-$sql = "SELECT id, clave, descripcion FROM $tabla WHERE clave LIKE ? OR descripcion LIKE ? LIMIT 15";
+// Array de claves específicas que quieres buscar
+$clavesArray = ['80141605', '80141500', '82121500', '82121908', 'H87', 'E48'];
+
+// Crear placeholders dinámicamente para el IN clause
+$placeholders = str_repeat('?,', count($clavesArray) - 1) . '?';
+
+$sql = "SELECT id, clave, descripcion FROM $tabla WHERE clave IN ($placeholders) AND (clave LIKE ? OR descripcion LIKE ?) LIMIT 15";
 
 $stmt = $con->prepare($sql);
 if (!$stmt) {
     die(json_encode(["error" => "Error al preparar la consulta: " . $con->error]));
 }
 
-$stmt->bind_param("ss", $termino, $termino);
+// Crear el string de tipos para bind_param
+$types = str_repeat("s", count($clavesArray)) . "ss";
+
+// Crear array de parámetros para bind_param (por referencia)
+$bindParams = [$types];
+foreach ($clavesArray as &$clave) {
+    $bindParams[] = &$clave;
+}
+$bindParams[] = &$termino;
+$bindParams[] = &$termino;
+
+// Usar call_user_func_array para bind_param con parámetros dinámicos
+call_user_func_array([$stmt, 'bind_param'], $bindParams);
 $stmt->execute();
 $resultado = $stmt->get_result();
 

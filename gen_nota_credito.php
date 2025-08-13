@@ -2,7 +2,7 @@
 /*ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
-require 'pdf.php';
+require 'pdfFinezza.php';
 require_once 'log_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
@@ -533,12 +533,12 @@ try {
 
         // Generar el XML y PDF base64
         try {
-            $sql = "INSERT INTO notas_pagos(idFactura, uuid, fecha, rutaXml, total) VALUES (?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO notas_pagos(idFactura, uuid, fecha, rutaXml, total, emisor) VALUES (?, ?, ?, ?, ?, ?)";
             $stmt = $con->prepare($sql);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
             }
-            $stmt->bind_param("issss", $idFactura, $uuid, $fechaExpedicion, $nombre, $totalAjustado);
+            $stmt->bind_param("issssi", $idFactura, $uuid, $fechaExpedicion, $nombre, $totalAjustado, $cuenta);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
             }
@@ -568,7 +568,7 @@ try {
         $stmt->close();
 
         try {
-            $pdfBase64 = leerXML($ruta, true, $idNota);
+            $pdfBase64 = leerXML($ruta, true, $idNota, $cuenta);
             if (!$pdfBase64) {
                 throw new Exception('Error al leer el XML y generar el PDF en base64.');
             }

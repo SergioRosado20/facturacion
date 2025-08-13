@@ -2,7 +2,7 @@
 /*ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
-require 'pdf.php';
+require 'pdfFinezza.php';
 require_once 'log_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
@@ -920,14 +920,14 @@ try {
             }
 
             // Primero insertamos el pago general
-            $sql = "INSERT INTO pagos(idFactura, importePagado, uuid, fecha, rutaXml, status) VALUES (?, ?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO pagos(idFactura, importePagado, uuid, fecha, rutaXml, status, emisor) VALUES (?, ?, ?, ?, ?, ?, ?)";
             $stmt = $con->prepare($sql);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
             }
             $statusPago = 'Vigente';
 
-            $stmt->bind_param("sdssss", $idFacturasString, $importePagado, $uuid, $fechaExpedicion, $nombre, $statusPago);
+            $stmt->bind_param("sdssssi", $idFacturasString, $importePagado, $uuid, $fechaExpedicion, $nombre, $statusPago, $cuenta);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
                 logToFile('User', 'userID', 'Error al ejecutar el INSERT del pago: '.$stmt->error, "error");
@@ -986,7 +986,7 @@ try {
 
         // Generar el XML y PDF base64
         try {
-            $pdfBase64 = leerXML($ruta, true, $id);
+            $pdfBase64 = leerXML($ruta, true, $id, $cuenta);
             if (!$pdfBase64) {
                 throw new Exception('Error al leer el XML y generar el PDF en base64.');
                 logToFile('User', 'userID', 'Error al leer el xml del pago realizado', "error", $data_string);

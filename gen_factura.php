@@ -2,7 +2,7 @@
 /*ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
-require 'pdf.php';
+require 'pdfFinezza.php';
 require_once 'log_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
@@ -115,7 +115,7 @@ try {
     } else {
         echo json_encode([
             'status' => 'error',
-            'message' => 'No se encontró ningún registro en la tabla token.',
+            'message' => 'No se encontró ningún registro en la tabla token 222.',
         ]);
     }
 } catch (\Exception $e) {
@@ -142,7 +142,7 @@ try {
     } else {
         echo json_encode([
             'status' => 'error',
-            'message' => 'No se encontró ningún registro en la tabla token.',
+            'message' => 'No se encontró ningún registro en la tabla token 333.',
         ]);
     }
 } catch (\Exception $e) {
@@ -423,7 +423,7 @@ try {
     //echo $content;
 
     if ($codigo == '000') {
-        logToFile($username, $userID, 'Se generó correctamente la factura', "success");
+        logToFile($username, $userID, 'Se generó correctamente la factura', json_encode($data, true), json_encode($content, true));
         // Generar el XML y PDF base64
         try {
             $xml = $content['cfdiTimbrado']['respuesta']['cfdixml'];
@@ -456,8 +456,7 @@ try {
                 ]);
             }
 
-
-            $pdfBase64 = leerXML($ruta, true, $id);
+            $pdfBase64 = leerXML($ruta, true, $id, $cuenta);
             if (!$pdfBase64) {
                 throw new Exception('Error al leer el XML y generar el PDF en base64.');
             }
@@ -488,7 +487,7 @@ try {
             }
 
             $status = '1'; // Status Activa
-            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`, `anticipo`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`, `anticipo`, `emisor`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             $stmt = $con->prepare($sqlBase64);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
@@ -498,7 +497,7 @@ try {
             $fechaActual = date('Y-m-d H:i:s');
 
             // Vincular parámetros y ejecutar
-            $stmt->bind_param("isssssssssssssssssii", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado, $anticipo);
+            $stmt->bind_param("isssssssssssssssssiii", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado, $anticipo, $cuenta);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
             }
