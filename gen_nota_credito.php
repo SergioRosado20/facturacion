@@ -168,7 +168,7 @@ if (isset($idFactura)) {
         }*/
     }
 
-    $sqlFacturaCount = "SELECT COUNT(*) as total FROM facturas WHERE 1";
+    $sqlFacturaCount = "SELECT MAX(idNotaPago) AS max_id FROM notas_pagos WHERE 1";
 
     $stmtCount = $con->prepare($sqlFacturaCount);
 
@@ -191,7 +191,7 @@ if (isset($idFactura)) {
 
     // Extraer el conteo
     $facturaActual = $result->fetch_assoc();
-    $facturaActual = strval($facturaActual['total'] + 1);
+    $facturaActual = intval($facturaActual['max_id']) + 1;
 
     $stmt->close();
 
@@ -493,7 +493,7 @@ try {
                 ]
             ],
             "Fecha" => $fechaExpedicion,
-            "Serie" => "AB",
+            "Serie" => strval($facturaActual),
             "MetodoPago" => $json[0]['metodo_pago'],
             "FormaPago" => $json[0]['forma_pago'],
             "Moneda" => "MXN",
@@ -501,7 +501,7 @@ try {
             "SubTotal" => $subTotal,
             "Total" => $totalAjustado,
             "Descuento" => $descuento,
-            "Folio" => $facturaActual,
+            "Folio" => strval($facturaActual),
             "adicionales" => [[
                 "Folio" => "6475"
             ]],
@@ -568,7 +568,18 @@ try {
         $stmt->close();
 
         try {
-            $pdfBase64 = leerXML($ruta, true, $idNota, $cuenta);
+            $sql = "SELECT f.emisor, f.pais_receptor, f.estado_receptor, f.municipio_receptor, f.ciudad_receptor, f.colonia_receptor, f.num_ext_receptor, f.num_int_receptor, f.calle_receptor, f.cp_receptor
+                FROM `notas_pagos`
+                INNER JOIN `facturas` f ON f.id = `notas_pagos`.idFactura
+                WHERE `notas_pagos`.idNotaPago = ?";
+            $stmt = $con->prepare($sql);
+            $stmt->bind_param("i", $idNota);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $receptorBD = $row;
+
+            $pdfBase64 = leerXML($ruta, true, $idNota, $cuenta, $receptorBD['pais_receptor'], $receptorBD['estado_receptor'], $receptorBD['municipio_receptor'], $receptorBD['ciudad_receptor'], $receptorBD['colonia_receptor'], $receptorBD['num_ext_receptor'], $receptorBD['num_int_receptor'], $receptorBD['calle_receptor'], $receptorBD['cp_receptor']);
             if (!$pdfBase64) {
                 throw new Exception('Error al leer el XML y generar el PDF en base64.');
             }

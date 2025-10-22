@@ -73,12 +73,25 @@ if($factura_id) {
         }
 
         try {
-            $sql = "SELECT * FROM `cuenta_factura` ORDER BY `id` DESC LIMIT 1";
-        
-            // Ejecutar la consulta (puedes usar tu conexión y método habitual)
+            if($pago == '1') {
+                $tabla = "pagos";
+                $id = "idPago";
+            } else {
+                $tabla = "facturas";
+                $id = "id";
+            }
+            $sql = "SELECT `emisor` FROM `".$tabla."` WHERE ".$id." = ?";
             $stmt = $con->prepare($sql);
+            $stmt->bind_param("i", $factura_id);
             $stmt->execute();
-            // Obtener el resultado
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $id_emisor = $row['emisor'];
+            //print_r($id_emisor);
+            $sql = "SELECT * FROM `cuenta_factura` WHERE id = ?";
+            $stmt = $con->prepare($sql);
+            $stmt->bind_param("i", $id_emisor);
+            $stmt->execute();
             $result = $stmt->get_result();
         
             if ($result && $row = $result->fetch_assoc()) {

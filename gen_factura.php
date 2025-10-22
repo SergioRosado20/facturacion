@@ -33,9 +33,18 @@ function limpiarUtf8($input) {
             $input[$key] = limpiarUtf8($value); // llamada recursiva
         }
     } elseif (is_string($input)) {
+        // Guardar la longitud original para debugging
+        $longitudOriginal = strlen($input);
+        
         // Solo si no está codificado en UTF-8
         if (!mb_check_encoding($input, 'UTF-8')) {
             $input = mb_convert_encoding($input, 'UTF-8', 'ISO-8859-1');
+        }
+        
+        // Verificar si se truncó el string
+        $longitudFinal = strlen($input);
+        if ($longitudOriginal != $longitudFinal) {
+            error_log("WARNING: String truncado en limpiarUtf8 - Original: $longitudOriginal, Final: $longitudFinal, Valor: '$input'");
         }
     } // Si no es string ni array (es int, float, bool, null, etc), lo deja tal cual
 
@@ -53,7 +62,17 @@ if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
 }
 
 
+// Debug: Verificar UsoCFDI antes de limpiar UTF-8
+if (isset($data['cuerpo']['Receptor']['cfdi'])) {
+    logToFile($username, $userID, 'UsoCFDI antes de limpiar UTF-8', "debug", "Valor: '" . $data['cuerpo']['Receptor']['cfdi'] . "', Longitud: " . strlen($data['cuerpo']['Receptor']['cfdi']));
+}
+
 $data = limpiarUtf8($data);
+
+// Debug: Verificar UsoCFDI después de limpiar UTF-8
+if (isset($data['cuerpo']['Receptor']['cfdi'])) {
+    logToFile($username, $userID, 'UsoCFDI después de limpiar UTF-8', "debug", "Valor: '" . $data['cuerpo']['Receptor']['cfdi'] . "', Longitud: " . strlen($data['cuerpo']['Receptor']['cfdi']));
+}
 //print_r($data);
 
 foreach ($data as $clave => $valor) {
@@ -81,6 +100,12 @@ if (isset($data['cuerpo'])) {
     $cambio = $data['cuerpo']['tipoCambio'];
     $productos = $data['cuerpo']['Conceptos'];
     $receptor = $data['cuerpo']['Receptor'];
+    
+    // Debug: Verificar UsoCFDI en el receptor
+    if (isset($receptor['cfdi'])) {
+        logToFile($username, $userID, 'UsoCFDI en receptor', "debug", "Valor: '" . $receptor['cfdi'] . "', Longitud: " . strlen($receptor['cfdi']));
+    }
+    
     //$emisor = $data['cuerpo']['Emisor'];
     //$token = $data['cuerpo']['Token'];
 } else {
@@ -270,6 +295,30 @@ $totalReportado = (float)$totalRedondeado;
 $valorEsperado = calcularValorEsperado($conceptos);
 $totalAjustado = ajustarTotalSiEsNecesario($totalReportado, $valorEsperado);
 
+$sql = "SELECT MAX(id) AS max_id FROM facturas WHERE 1";
+
+$stmt = $con->prepare($sql);
+
+if ($stmt === false) {
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Error al preparar la consulta: ' . $con->error
+    ]);
+    exit;
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result) {
+    $row = $result->fetch_assoc();
+    $facturaActual = intval($row['max_id']) + 1;
+} else {
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Error al obtener el resultado'
+    ]);
+}
 ///////////////////////////////////////////////////////////////////// TERMINA ZONA DE CONSUTLAS Y CÁLCULOS
 
 try {
@@ -291,6 +340,26 @@ try {
     $estadoEmisor = $emisor["estado"];
     $cpEmisor = $emisor["cp"];
     $paisEmisor = $emisor["pais"];
+
+    $paisReceptor = $receptor["pais"];
+    $estadoReceptor = $receptor["estado"];
+    $municipioReceptor = $receptor["municipio"];
+    $ciudadReceptor = $receptor["ciudad"];
+    $coloniaReceptor = $receptor["colonia"];
+    $manzanaReceptor = $receptor["manzana"];
+    $numExtReceptor = $receptor["numext"];
+    $numIntReceptor = $receptor["numint"];
+    $calleReceptor = $receptor["calle"];
+    $cpReceptor = $receptor["cp"];
+    
+    // Debug: Verificar el UsoCFDI antes de usarlo
+    $usoCFDIOriginal = $receptor['cfdi'];
+    logToFile($username, $userID, 'UsoCFDI original recibido', "debug", "Valor: '$usoCFDIOriginal', Longitud: " . strlen($usoCFDIOriginal));
+    
+    // Asegurar que el UsoCFDI tenga el formato correcto
+    $usoCFDI = trim($usoCFDIOriginal);
+    
+    logToFile($username, $userID, 'UsoCFDI final validado', "info", "Valor final: '$usoCFDI', Longitud: " . strlen($usoCFDI));
 
     $pass = $emisor["pass"];
     $iv_base64 = $emisor["iv"];
@@ -347,7 +416,7 @@ try {
             "NumeroDecimales" => 2,
             "TipoCFDI" => $comprobante,
             "EnviaEmail" => false,
-            "EmailMensaje" => "Factura de ISI Import",
+            "EmailMensaje" => "",
             "noUsarPlantillaHtml" => "true",
         ],
         "Encabezado" => [
@@ -372,7 +441,7 @@ try {
             "Receptor" => [
                 "RFC" => $receptor['rfc'],
                 "NombreRazonSocial" => $receptor['nombre'],
-                "UsoCFDI" => $receptor['cfdi'],
+                "UsoCFDI" => $usoCFDI,
                 "RegimenFiscal" => $receptor['regimen'],
                 "Direccion" => [            
                     "Calle" => $receptor['calle'],
@@ -387,14 +456,14 @@ try {
                 ]
             ],
             "Fecha" => $fechaExpedicion,
-            "Serie" => "AB",
+            "Serie" => strval($facturaActual),
             "MetodoPago" => $receptor['metodoP'],
             "FormaPago" => $receptor['formaP'],
             "Moneda" => $moneda,
             "LugarExpedicion" => $cpEmisor,
             "SubTotal" => $subTotal,
             "Total" => $totalAjustado,
-            "Folio" => $facturaActual,
+            "Folio" => strval($facturaActual),
         ],
         "Conceptos" => $conceptos,
     ];
@@ -407,6 +476,7 @@ try {
             $data['Encabezado']['cfdIsRelacionados'] = $uuidRelacionado;
     }
 
+    logToFile($username, $userID, 'Datos a enviar a la API', "debug", json_encode($data, true));
     $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
@@ -431,32 +501,7 @@ try {
             $ruta = 'xml/'.$nombre;
             file_put_contents($ruta, $xml);
 
-            $sql = "SELECT COUNT(*) AS total FROM facturas WHERE 1";
-
-            $stmt = $con->prepare($sql);
-
-            if ($stmt === false) {
-                echo json_encode([
-                    'status' => 'error',
-                    'message' => 'Error al preparar la consulta: ' . $con->error
-                ]);
-                exit;
-            }
-
-            $stmt->execute();
-            $result = $stmt->get_result();
-
-            if ($result) {
-                $row = $result->fetch_assoc();
-                $id = intval($row['total']) + 1; // Aquí accedes al alias 'total'
-            } else {
-                echo json_encode([
-                    'status' => 'error',
-                    'message' => 'Error al obtener el resultado'
-                ]);
-            }
-
-            $pdfBase64 = leerXML($ruta, true, $id, $cuenta);
+            $pdfBase64 = leerXML($ruta, true, $facturaActual, $cuenta, $paisReceptor, $estadoReceptor, $municipioReceptor, $ciudadReceptor, $coloniaReceptor, $numExtReceptor, $numIntReceptor, $calleReceptor, $cpReceptor, $manzanaReceptor);
             if (!$pdfBase64) {
                 throw new Exception('Error al leer el XML y generar el PDF en base64.');
             }
@@ -487,7 +532,7 @@ try {
             }
 
             $status = '1'; // Status Activa
-            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`, `anticipo`, `emisor`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`, `anticipo`, `emisor`, `pais_receptor`, `estado_receptor`, `municipio_receptor`, `ciudad_receptor`, `colonia_receptor`, `num_ext_receptor`, `num_int_receptor`, `calle_receptor`, `cp_receptor`, `manzana_receptor`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             $stmt = $con->prepare($sqlBase64);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
@@ -497,7 +542,7 @@ try {
             $fechaActual = date('Y-m-d H:i:s');
 
             // Vincular parámetros y ejecutar
-            $stmt->bind_param("isssssssssssssssssiii", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado, $anticipo, $cuenta);
+            $stmt->bind_param("isssssssssssssssssiiissssssssss", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado, $anticipo, $cuenta, $paisReceptor, $estadoReceptor, $municipioReceptor, $ciudadReceptor, $coloniaReceptor, $numExtReceptor, $numIntReceptor, $calleReceptor, $cpReceptor, $manzanaReceptor);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
             }
@@ -583,7 +628,7 @@ try {
         'message' => 'Error en la solicitud de la factura: ' . $e->getMessage(),
         'data' => $data,
     ]);
-    logToFile($username, $userID, 'Error en la solicitud de la factura: '.$e->getMessage(), "error", $data);
+    logToFile($username, $userID, 'Error en la solicitud de la factura: '.$e->getMessage(), "error", json_encode($data));
     exit;
 }
 

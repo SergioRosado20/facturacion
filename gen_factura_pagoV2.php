@@ -162,7 +162,16 @@ if (isset($_GET['id'])) {
                 'reg_fiscal' => $cliente['RegimenFiscalReceptor'],
                 'cfdi' => $cliente['UsoCFDI'],
                 'rfc' => $cliente['Rfc'],
-                'cp_factura' => $cliente['DomicilioFiscalReceptor']
+                'cp_factura' => $cliente['DomicilioFiscalReceptor'],
+                'pais' => $row['pais_receptor'],
+                'estado' => $row['estado_receptor'],
+                'municipio' => $row['municipio_receptor'],
+                'ciudad' => $row['ciudad_receptor'],
+                'colonia' => $row['colonia_receptor'],
+                'calle' => $row['calle_receptor'],
+                'num_ext' => $row['num_ext_receptor'],
+                'num_int' => $row['num_int_receptor'],
+                'cp' => $row['cp_receptor'],
             ];
         }
 
@@ -179,7 +188,7 @@ if (isset($_GET['id'])) {
     $data['total'] = $nuevoTotal;
 
     //print_r($data);
-    $sqlFacturaCount = "SELECT COUNT(*) as total FROM facturas WHERE 1";
+    $sqlFacturaCount = "SELECT MAX(idPago) AS max_id FROM pagos WHERE 1";
 
     $stmtCount = $con->prepare($sqlFacturaCount);
 
@@ -202,7 +211,7 @@ if (isset($_GET['id'])) {
 
     // Extraer el conteo
     $facturaActual = $result->fetch_assoc();
-    $facturaActual = strval($facturaActual['total'] + 1);
+    $facturaActual = strval($facturaActual['max_id'] + 1);
 
     $stmt->close();
 }
@@ -786,12 +795,12 @@ try {
                 ]
             ],
             "Fecha" => $fechaExpedicion,
-            "Serie" => "AB",
+            "Serie" => strval($facturaActual),
             "Moneda" => $moneda,
             "LugarExpedicion" => $cpEmisor,
             "SubTotal" => 0,
             "Total" => 0,
-            "Folio" => $facturaActual,
+            "Folio" => strval($facturaActual),
         ],
         "Conceptos" => [
             [
@@ -920,14 +929,14 @@ try {
             }
 
             // Primero insertamos el pago general
-            $sql = "INSERT INTO pagos(idFactura, importePagado, uuid, fecha, rutaXml, status, emisor) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO pagos(idFactura, importePagado, uuid, fecha, rutaXml, status, emisor, formaPago) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $con->prepare($sql);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
             }
             $statusPago = 'Vigente';
 
-            $stmt->bind_param("sdssssi", $idFacturasString, $importePagado, $uuid, $fechaExpedicion, $nombre, $statusPago, $cuenta);
+            $stmt->bind_param("sdssssis", $idFacturasString, $importePagado, $uuid, $fechaExpedicion, $nombre, $statusPago, $cuenta, $formaPago);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
                 logToFile('User', 'userID', 'Error al ejecutar el INSERT del pago: '.$stmt->error, "error");
@@ -986,7 +995,18 @@ try {
 
         // Generar el XML y PDF base64
         try {
-            $pdfBase64 = leerXML($ruta, true, $id, $cuenta);
+            $sql = "SELECT f.emisor, f.pais_receptor, f.estado_receptor, f.municipio_receptor, f.ciudad_receptor, f.colonia_receptor, f.num_ext_receptor, f.num_int_receptor, f.calle_receptor, f.cp_receptor
+                FROM `pagos`
+                INNER JOIN `facturas` f ON f.id = `pagos`.idFactura
+                WHERE idPago = ?";
+            $stmt = $con->prepare($sql);
+            $stmt->bind_param("i", $idPago);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $receptorBD = $row;
+            
+            $pdfBase64 = leerXML($ruta, true, $idPago, $cuenta, $receptorBD['pais_receptor'], $receptorBD['estado_receptor'], $receptorBD['municipio_receptor'], $receptorBD['ciudad_receptor'], $receptorBD['colonia_receptor'], $receptorBD['num_ext_receptor'], $receptorBD['num_int_receptor'], $receptorBD['calle_receptor'], $receptorBD['cp_receptor']);
             if (!$pdfBase64) {
                 throw new Exception('Error al leer el XML y generar el PDF en base64.');
                 logToFile('User', 'userID', 'Error al leer el xml del pago realizado', "error", $data_string);

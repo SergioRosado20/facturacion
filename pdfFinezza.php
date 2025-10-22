@@ -13,6 +13,7 @@ use Endroid\QrCode\Writer\PngWriter;
 use Endroid\QrCode\Color\Color;
 require_once "cors.php";
 require_once "log_helper.php";
+require_once "constants.php";
 cors();
 
 $data = json_decode(file_get_contents('php://input'), true);
@@ -182,7 +183,7 @@ function getUUIDForNotaCredito(string $nombreArchivoXml): ?string
     return null;
 }
 
-function leerXML($nombreArchivoXml, $pdf = false, $id = null, $emisor = null) {
+function leerXML($nombreArchivoXml, $pdf = false, $id = null, $emisor = null, $pais = null, $estado = null, $municipio = null, $ciudad = null, $colonia = null, $numExt = null, $numInt = null, $calle = null, $cp = null, $manzana = null) {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
     $dotenv->load();
     
@@ -235,7 +236,7 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null, $emisor = null) {
             "Rfc" => $emisor["rfc"],
             "Nombre" => $emisor["nombre"],
             "RegimenFiscal" => $emisor["regimen"],
-            "domicilioEmisor" => $emisor["cp"] . ', ' . $emisor["estado"] . ', ' . $emisor["municipio"] . ', ' . $emisor["colonia"] . ', ' . $emisor["calle"] . ', ' . $emisor["num_ext"] . ' ' . $emisor["num_int"],
+            "domicilioEmisor" => $emisor["cp"] . ', ' . $emisor["estado"] . ', ' . $emisor["municipio"] . ', ' . $emisor["colonia"] . ', ' . $emisor["manzana"] . ', ' . $emisor["calle"] . ', ' . $emisor["num_ext"] . ' ' . $emisor["num_int"],
             "LugarExpedicion" => $emisor["cp"],
         ];
     } else if($id) {
@@ -259,7 +260,7 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null, $emisor = null) {
             } else {
                 echo json_encode([
                     'status' => 'error',
-                    'message' => 'No se encontró ningún registro en la tabla token 444.',
+                    'message' => 'No se encontró ningún registro en la tabla token 555.',
                 ]);
             }
         } catch (\Exception $e) {
@@ -280,7 +281,6 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null, $emisor = null) {
             "LugarExpedicion" => $emisor["cp"],
         ];
     }
-
     //$factura['Emisor'] = $arrEmisor;
     
     // Leer el archivo XML
@@ -347,6 +347,16 @@ function leerXML($nombreArchivoXml, $pdf = false, $id = null, $emisor = null) {
                 'RegimenFiscalReceptor' => (string)$receptor[0]['RegimenFiscalReceptor'],
                 'UsoCFDI' => (string)$receptor[0]['UsoCFDI'],
                 'DomicilioFiscalReceptor' => (string)$receptor[0]['DomicilioFiscalReceptor'],
+                'Pais' => (string)$pais,
+                'Estado' => (string)$estado,
+                'Municipio' => (string)$municipio,
+                'Ciudad' => (string)$ciudad,
+                'Colonia' => (string)$colonia,
+                'Manzana' => (string)$manzana,
+                'NumExt' => (string)$numExt,
+                'NumInt' => (string)$numInt,
+                'Calle' => (string)$calle,
+                'Cp' => (string)$cp,
             ];
 
             // Conceptos (productos o servicios)
@@ -552,10 +562,9 @@ function arrayPdf($data) {
         "Rfc" => $emisor["rfc"],
         "Nombre" => $emisor["nombre"],
         "RegimenFiscal" => $emisor["regimen"],
-        "domicilioEmisor" => $emisor["cp"] . ', ' . $emisor["estado"] . ', ' . $emisor["municipio"] . ', ' . $emisor["colonia"] . ', ' . $emisor["calle"] . ', ' . $emisor["num_ext"] . ' ' . $emisor["num_int"],
+        "domicilioEmisor" => $emisor["cp"] . ', ' . $emisor["estado"] . ', ' . $emisor["municipio"] . ', ' . $emisor["colonia"] . ', ' . $emisor["manzana"] . ', ' . $emisor["calle"] . ', ' . $emisor["num_ext"] . ' ' . $emisor["num_int"],
         "LugarExpedicion" => $emisor["cp"],
     ];
-
     $data['Emisor'] = $arrEmisor;
 
     //Info General
@@ -686,6 +695,11 @@ function generarPDF($array, $id) {
         
                 // Iterar sobre cada columna de la fila para obtener la altura máxima
                 foreach ($row as $i => $col) {
+                    $espacioDisponible = $this->GetPageHeight() - $this->GetY();
+                    if ($espacioDisponible < 50) {
+                        $this->AddPage();
+                        $y = 10;
+                    }
                     // Guardar la posición de la celda actual
                     $this->SetX(10);
                     $x = $this->GetX();
@@ -924,7 +938,10 @@ function generarPDF($array, $id) {
     }
 
     $Emisor = $array['Emisor'];
-    $Receptor = $array['Receptor'];
+    //$Receptor = $array['Receptor'];
+    $Receptor = array_filter($array['Receptor'], function($value) {
+        return !is_null($value) && $value !== 'null';
+    });
     $DocsRelacionados = $array['DocsRelacionados'];
     // Fecha original en formato ISO 8601
     $fechaOriginal = $array['Fecha'];
@@ -1392,6 +1409,16 @@ function generarPDF($array, $id) {
     $pdf->lugarExpedicion = $Emisor['LugarExpedicion'];
     $pdf->regimenFiscal = regFiscal($Emisor['RegimenFiscal']);
     $pdf->domicilioEmisor = $Emisor['domicilioEmisor'];
+    $pdf->paisReceptor = $Receptor['Pais'];
+    $pdf->estadoReceptor = $Receptor['Estado'];
+    $pdf->municipioReceptor = $Receptor['Municipio'];
+    $pdf->ciudadReceptor = $Receptor['Ciudad'];
+    $pdf->coloniaReceptor = $Receptor['Colonia'];
+    $pdf->manzanaReceptor = $Receptor['Manzana'];
+    $pdf->numExtReceptor = $Receptor['NumExt'];
+    $pdf->numIntReceptor = $Receptor['NumInt'];
+    $pdf->calleReceptor = $Receptor['Calle'];
+    $pdf->cpReceptor = $Receptor['Cp'];
     //logToFile('0', '0', 'Tipo de comprobante 2', 'info', $array['TipoDeComprobante'] . ' ' . $array['Comprobante']);
     $pdf->TipoDeComprobante = isset($array['TipoDeComprobante']) ? $array['TipoDeComprobante'] : $array['Comprobante'];
     $pdf->AddPage();
@@ -1431,18 +1458,30 @@ function generarPDF($array, $id) {
     $pdf->Cell(0, 4, safe_sutf8_decode($Receptor['Rfc']), 0, 1, 'L', 1);
 
     $pdf->SetFont('Arial','B',7);
-    $pdf->SetXY(145, 59);
-    $pdf->MultiCell(60, 4, safe_sutf8_decode('Régimen Fiscal: '), 0, 1, 'L', 1);
+    $pdf->SetXY(150, 59);
+    $pdf->MultiCell(55, 4, safe_sutf8_decode('Régimen Fiscal: '), 0, 1, 'L', 1);
     $pdf->SetFont('Arial','',7);
-    $pdf->SetXY(120, 63);
+    $pdf->SetXY(145, 63);
     $pdf->MultiCell(0, 4, safe_sutf8_decode(regFiscal($Receptor['RegimenFiscalReceptor'])), 0, 1);
 
+    $direccion = implode(', ', array_filter([
+        $Receptor['Pais'] ?? '',
+        $Receptor['Estado'] ?? '',
+        $Receptor['Ciudad'] ?? '',
+        $Receptor['Municipio'] ?? '',
+        $Receptor['Cp'] ?? '',
+        $Receptor['Colonia'] ?? '',
+        $Receptor['Manzana'] ?? '',
+        $Receptor['Calle'] ?? '',
+        $Receptor['NumExt'] ?? '',
+        $Receptor['NumInt'] ?? ''
+    ]));
     $pdf->SetFont('Arial','B',7);
     $pdf->SetXY(10, 63);
     $pdf->Cell(0, 4, 'Domicilio:', 0, 1);
     $pdf->SetFont('Arial','',7);
     $pdf->SetXY(25, 63);
-    $pdf->MultiCell(0, 4, safe_sutf8_decode($Receptor['DomicilioFiscalReceptor']), 0, 1);
+    $pdf->MultiCell(120, 4, safe_sutf8_decode($direccion), 0, 1);
     
 
     $pdf->Ln(8);
@@ -1451,7 +1490,12 @@ function generarPDF($array, $id) {
 
     $y = $pdf->GetY();
     $y = $y + 5;
-    
+
+    $espacioDisponible = $pdf->GetPageHeight() - $pdf->GetY();
+    if ($espacioDisponible < 50) {
+        $pdf->AddPage();
+        $y = 10;
+    }
     // Total con letra (lado izquierdo)
     $pdf->SetXY(10, $y);
     $pdf->SetFont('Arial', 'B', 8);
@@ -1493,6 +1537,12 @@ function generarPDF($array, $id) {
 
     $y = $pdf->GetY();
     $y = $y;
+    
+    $espacioDisponible = $pdf->GetPageHeight() - $pdf->GetY();
+    if ($espacioDisponible < 50) {
+        $pdf->AddPage();
+        $y = 10;
+    }
     
     $pdf->SetFillColor(220, 220, 220);
     $pdf->Rect(10, $y-2, 195, 18, 'DF');
@@ -1612,6 +1662,14 @@ function generarPDF($array, $id) {
         // Sellos digitales
         $y = $pdf->GetY();
         $y = $y + 20;
+        $pdf->SetY($y);
+
+        $espacioDisponible = $pdf->GetPageHeight() - $pdf->GetY();
+        if ($espacioDisponible < 50) {
+            $pdf->AddPage();
+            $y = 10;
+        }
+
         $pdf->Rect(10, $y, 195, 20, 'D');
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->SetXY(10, $y);
@@ -1622,6 +1680,14 @@ function generarPDF($array, $id) {
 
         $y = $pdf->GetY();
         $y = $y + 4;
+        $pdf->SetY($y);
+
+        $espacioDisponible = $pdf->GetPageHeight() - $pdf->GetY();
+        if ($espacioDisponible < 50) {
+            $pdf->AddPage();
+            $y = 10;
+        }
+
         $pdf->Rect(10, $y, 195, 20, 'D');
         $pdf->SetFont('Arial', 'B', 8);
         $pdf->SetXY(10, $y);
