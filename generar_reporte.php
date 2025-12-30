@@ -35,11 +35,11 @@ $data = json_decode($raw_json, true);
 
 $fecha_inicio = $data['fecha_inicio'];
 $fecha_fin = $data['fecha_fin'];
-$cuenta_facturacion = $data['cuenta_facturacion'];
-$cliente = $data['cliente'];
-$estado = $data['estado'];
-$estado_pago = $data['estado_pago'];
-$tipo = $data['tipo'];
+$cuenta_facturacion = isset($data['cuenta_facturacion']) ? $data['cuenta_facturacion'] : null;
+$cliente = isset($data['cliente']) ? $data['cliente'] : null;
+$estado = isset($data['estado']) ? $data['estado'] : null;
+$estado_pago = isset($data['estado_pago']) ? $data['estado_pago'] : null;
+$tipo = isset($data['tipo']) ? $data['tipo'] : null;
 
 logToFile('0', '0', 'Data recibida en generar_reporte.php', json_encode($data));
 
@@ -111,6 +111,9 @@ try {
         $paramsFacturas[] = $estado_pago;
     }
 
+    $whereFacturas .= " ORDER BY f.id ASC";
+    $wherePagos .= " ORDER BY pf.id ASC";
+
     $sql = "SELECT f.id, f.status, f.total, f.cliente, f.fecha, f.cfdi, f.tipoCfdi, f.uuid, f.metodoPago, f.formaPago, f.moneda, f.lugarExpedicion, f.subTotal, f.serie, f.folio, f.saldoInsoluto, f.pagado, f.anticipo, f.id_relacion, f.emisor, f.saldoInsoluto, cf.rfc as rfc_emisor
             FROM facturas as f
             INNER JOIN cuenta_factura as cf ON f.emisor = cf.id
@@ -125,7 +128,7 @@ try {
         $facturas[] = $row;
     }
 
-    $sql = "SELECT pf.id, pf.fkPago, pf.fkFactura, pf.importePagado, pf.saldoAnterior, pf.saldoInsoluto, pf.parcialidad, pf.fecha, p.emisor, p.status, p.uuid, cf.rfc as rfc_emisor, f.cliente, f.total
+    $sql = "SELECT pf.id, pf.fkPago, pf.fkFactura, pf.importePagado, pf.saldoAnterior, pf.saldoInsoluto, pf.parcialidad, pf.fecha, p.emisor, p.status, p.uuid, p.formaPago, cf.rfc as rfc_emisor, f.cliente, f.total
             FROM pagos_facturas as pf
             INNER JOIN pagos as p ON pf.fkPago = p.idPago
             INNER JOIN cuenta_factura as cf ON p.emisor = cf.id
@@ -152,21 +155,22 @@ try {
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setCellValue('A1', 'Folio');
-        $sheet->setCellValue('B1', 'Cliente');
-        $sheet->setCellValue('C1', 'Fecha');
-        $sheet->setCellValue('D1', 'Total');
-        $sheet->setCellValue('E1', 'Importe Pagado');
-        $sheet->setCellValue('F1', 'Saldo Anterior');
-        $sheet->setCellValue('G1', 'Saldo Insoluto');
-        $sheet->setCellValue('H1', 'Parcialidad');
-        $sheet->setCellValue('I1', 'Estado');
-        $sheet->setCellValue('J1', 'Pago');
-        $sheet->setCellValue('K1', 'Tipo CFDI');
-        $sheet->setCellValue('L1', 'RFC Emisor');
-        $sheet->setCellValue('M1', 'UUID');
-        $sheet->setCellValue('N1', 'Metodo Pago');
-        $sheet->setCellValue('O1', 'Forma Pago');
+        $sheet->setCellValue('A1', 'Folio Pago');
+        $sheet->setCellValue('B1', 'Folio Factura');
+        $sheet->setCellValue('C1', 'Cliente');
+        $sheet->setCellValue('D1', 'Fecha');
+        $sheet->setCellValue('E1', 'Total');
+        $sheet->setCellValue('F1', 'Importe Pagado');
+        $sheet->setCellValue('G1', 'Saldo Anterior');
+        $sheet->setCellValue('H1', 'Saldo Insoluto');
+        $sheet->setCellValue('I1', 'Parcialidad');
+        $sheet->setCellValue('J1', 'Estado');
+        $sheet->setCellValue('K1', 'Pago');
+        $sheet->setCellValue('L1', 'Tipo CFDI');
+        $sheet->setCellValue('M1', 'RFC Emisor');
+        $sheet->setCellValue('N1', 'UUID');
+        $sheet->setCellValue('O1', 'Metodo Pago');
+        $sheet->setCellValue('P1', 'Forma Pago');
 
         $row = 2;
         foreach($facturas as $factura){
@@ -295,21 +299,30 @@ try {
                 $formaPago = '';
             }
 
-            $sheet->setCellValue('A' . $row, $factura['id'] ?? '');
-            $sheet->setCellValue('B' . $row, $factura['cliente'] ?? '');
-            $sheet->setCellValue('C' . $row, $factura['fecha'] ?? '');
-            $sheet->setCellValue('D' . $row, $factura['total'] ?? '');
-            $sheet->setCellValue('E' . $row, $factura['importePagado'] ?? '');
-            $sheet->setCellValue('F' . $row, $factura['saldoAnterior'] ?? '');
-            $sheet->setCellValue('G' . $row, $factura['saldoInsoluto'] ?? '');
-            $sheet->setCellValue('H' . $row, $factura['parcialidad'] ?? '');
-            $sheet->setCellValue('I' . $row, $status ?? '');
-            $sheet->setCellValue('J' . $row, isset($factura['pagado']) ? ($factura['pagado'] === 1 ? 'Pagada' : 'Pendiente') : '');
-            $sheet->setCellValue('K' . $row, $tipoCfdi ?? '');
-            $sheet->setCellValue('L' . $row, $factura['rfc_emisor'] ?? '');
-            $sheet->setCellValue('M' . $row, $factura['uuid'] ?? '');
-            $sheet->setCellValue('N' . $row, $factura['metodoPago'] ?? '');
-            $sheet->setCellValue('O' . $row, $formaPago ?? '');
+            // Determinar si es factura o pago para mostrar los folios correctamente
+            if (isset($factura['importePagado'])) {
+                // Es un registro de pago: mostrar Folio Factura (fkFactura) y Folio Pago (id)
+                $sheet->setCellValue('A' . $row, $factura['id'] ?? '');
+                $sheet->setCellValue('B' . $row, $factura['fkFactura'] ?? '');
+            } else {
+                // Es un registro de factura: mostrar solo Folio Factura (id)
+                $sheet->setCellValue('A' . $row, ''); // Sin Folio Pago para facturas
+                $sheet->setCellValue('B' . $row, $factura['id'] ?? '');
+            }
+            $sheet->setCellValue('C' . $row, $factura['cliente'] ?? '');
+            $sheet->setCellValue('D' . $row, $factura['fecha'] ?? '');
+            $sheet->setCellValue('E' . $row, $factura['total'] ?? '');
+            $sheet->setCellValue('F' . $row, $factura['importePagado'] ?? '');
+            $sheet->setCellValue('G' . $row, $factura['saldoAnterior'] ?? '');
+            $sheet->setCellValue('H' . $row, $factura['saldoInsoluto'] ?? '');
+            $sheet->setCellValue('I' . $row, $factura['parcialidad'] ?? '');
+            $sheet->setCellValue('J' . $row, $status ?? '');
+            $sheet->setCellValue('K' . $row, isset($factura['pagado']) ? ($factura['pagado'] === 1 ? 'Pagada' : 'Pendiente') : '');
+            $sheet->setCellValue('L' . $row, $tipoCfdi ?? '');
+            $sheet->setCellValue('M' . $row, $factura['rfc_emisor'] ?? '');
+            $sheet->setCellValue('N' . $row, $factura['uuid'] ?? '');
+            $sheet->setCellValue('O' . $row, $factura['metodoPago'] ?? '');
+            $sheet->setCellValue('P' . $row, $formaPago ?? '');
             $row++;
         }
         

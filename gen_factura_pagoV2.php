@@ -905,13 +905,13 @@ try {
 
             try{
                 foreach ($insolutos as $idFactura => $saldoInsoluto) {
-                    $sql = "UPDATE `facturas` SET `saldoInsoluto`=? WHERE `id`=?";
+                    $sql = "UPDATE `facturas` SET `saldoInsoluto`=?, `pagado`=CASE WHEN CAST(? AS DECIMAL(10,2)) = 0 THEN 1 ELSE `pagado` END WHERE `id`=?";
                     $stmt = $con->prepare($sql);
                     if ($stmt === false) {
                         throw new Exception("Error en la preparación de la consulta: " . $con->error);
                     }
                     
-                    $stmt->bind_param("si", $saldoInsoluto, $idFactura);
+                    $stmt->bind_param("ssi", $saldoInsoluto, $saldoInsoluto, $idFactura);
                     if (!$stmt->execute()) {
                         throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
                         logToFile('User', 'userID', 'Error al ejecutar el INSERT del pago: '.$stmt->error, "error");
