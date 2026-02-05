@@ -477,7 +477,7 @@ try {
     }
 
     logToFile($username, $userID, 'Datos a enviar a la API', "debug", json_encode($data, true));
-    $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
+    $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
             'accept' => 'application/json',

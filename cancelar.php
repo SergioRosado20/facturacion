@@ -214,7 +214,7 @@ if($factura_id) {
 
         logToFile('', 'Cancelar', json_encode($body, true), "success");
 
-        $resCancelacion = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/cancelar/csd', [
+        $resCancelacion = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/cancelar/csd', [
             'body' => json_encode($body),
             'headers' => [
                 'accept' => 'application/json',
