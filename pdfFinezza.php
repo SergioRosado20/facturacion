@@ -93,6 +93,8 @@ function removeNamespacesFromXML($xml) {
     $json = json_encode($xmlObject);
     $array = json_decode($json, true);
 
+    print_r($array);
+
     // Convertir el array nuevamente a un XML limpio, sin namespaces
     $xmlClean = new SimpleXMLElement('<root/>');
     arrayToXML($array, $xmlClean);
@@ -946,8 +948,11 @@ function generarPDF($array, $id) {
     // Fecha original en formato ISO 8601
     $fechaOriginal = $array['Fecha'];
     $date = new DateTime($fechaOriginal);
+    $fechaPago = $array['Pagos']['FechaPago'];
+    $datePago = new DateTime($fechaPago);
     // Formatear la fecha al formato deseado: d/M/Y H:i:s
     $formatoDeseado = $date->format('d/M/Y H:i:s');
+    $formatoDeseadoPago = $datePago->format('d/M/Y H:i:s');
     // Reemplazar el mes numérico por su versión en texto (español)
     $meses = array(
         'Jan' => 'Ene', 'Feb' => 'Feb', 'Mar' => 'Mar', 'Apr' => 'Abr', 'May' => 'May', 'Jun' => 'Jun',
@@ -955,6 +960,7 @@ function generarPDF($array, $id) {
     );
     // Reemplazar el mes abreviado en inglés por español
     $fechaFinal = strtr($formatoDeseado, $meses);
+    $fechaFinalPago = strtr($formatoDeseadoPago, $meses);
 
     $metodoPago = $array['MetodoPago'];
     if($metodoPago == 'PUE') {
@@ -1436,10 +1442,19 @@ function generarPDF($array, $id) {
 
     $pdf->SetFont('Arial','B',7);
     $pdf->SetXY(93, 55);
-    $pdf->Cell(80, 4, 'Fecha: ', 0, 1, 'R');
+    $pdf->Cell(80, 4, safe_sutf8_decode('Fecha de Expedición: '), 0, 1, 'R');
     $pdf->SetFont('Arial','',7);
     $pdf->SetXY(120, 55);
     $pdf->Cell(80, 4, $fechaFinal, 0, 1, 'R');
+
+    if(isset($array['Pagos']) && !empty($array['Pagos'])) {
+        $pdf->SetFont('Arial','B',7);
+        $pdf->SetXY(33, 55);
+        $pdf->Cell(80, 4, safe_sutf8_decode('Fecha de Pago: '), 0, 1, 'R');
+        $pdf->SetFont('Arial','',7);
+        $pdf->SetXY(60, 55);
+        $pdf->Cell(80, 4, $fechaFinalPago, 0, 1, 'R');
+    }
 
     $pdf->SetFillColor(255, 255, 255);
     // Información del Cliente (lado izquierdo, debajo del header)
