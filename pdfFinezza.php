@@ -93,8 +93,6 @@ function removeNamespacesFromXML($xml) {
     $json = json_encode($xmlObject);
     $array = json_decode($json, true);
 
-    print_r($array);
-
     // Convertir el array nuevamente a un XML limpio, sin namespaces
     $xmlClean = new SimpleXMLElement('<root/>');
     arrayToXML($array, $xmlClean);
