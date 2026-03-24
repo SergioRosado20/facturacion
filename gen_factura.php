@@ -4,6 +4,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
 require 'pdfFinezza.php';
 require_once 'log_helper.php';
+require_once 'auth_user_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();
@@ -13,7 +14,9 @@ session_start();
 
 $client = new \GuzzleHttp\Client();
 
-$username = $_SESSION['username'];
+$authUser = getAuthenticatedUserData();
+$username = $authUser['username'];
+$userID = $authUser['userID'];
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->load();
@@ -477,7 +480,7 @@ try {
     }
 
     logToFile($username, $userID, 'Datos a enviar a la API', "debug", json_encode($data, true));
-    $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
+    $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
             'accept' => 'application/json',
@@ -531,8 +534,9 @@ try {
                 $saldoInsoluto = '0.00';
             }
 
+            $createdBy = intval($userID);
             $status = '1'; // Status Activa
-            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`, `anticipo`, `emisor`, `pais_receptor`, `estado_receptor`, `municipio_receptor`, `ciudad_receptor`, `colonia_receptor`, `num_ext_receptor`, `num_int_receptor`, `calle_receptor`, `cp_receptor`, `manzana_receptor`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            $sqlBase64 = "INSERT INTO `facturas`(`status`, `total`, `cliente`, `base64`, `rutaXml`, `servicios`, `fecha`, `uuid`, `moneda`, `tipoCfdi`, `metodoPago`, `formaPago`, `lugarExpedicion`, `subTotal`, `serie`, `folio`, `cfdi`, `saldoInsoluto`, `pagado`, `anticipo`, `emisor`, `pais_receptor`, `estado_receptor`, `municipio_receptor`, `ciudad_receptor`, `colonia_receptor`, `num_ext_receptor`, `num_int_receptor`, `calle_receptor`, `cp_receptor`, `manzana_receptor`, `created_by`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             $stmt = $con->prepare($sqlBase64);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
@@ -542,7 +546,7 @@ try {
             $fechaActual = date('Y-m-d H:i:s');
 
             // Vincular parámetros y ejecutar
-            $stmt->bind_param("isssssssssssssssssiiissssssssss", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado, $anticipo, $cuenta, $paisReceptor, $estadoReceptor, $municipioReceptor, $ciudadReceptor, $coloniaReceptor, $numExtReceptor, $numIntReceptor, $calleReceptor, $cpReceptor, $manzanaReceptor);
+            $stmt->bind_param("isssssssssssssssssiiissssssssssi", $status, $totalAjustado, $receptor['nombre'], $pdfBase64, $nombre, $prodsJson, $fechaActual, $uuid, $moneda, $tipoCFDI, $receptor['metodoP'], $receptor['formaP'], $cpEmisor, $subTotal, $serie, $folio, $sello, $saldoInsoluto, $pagado, $anticipo, $cuenta, $paisReceptor, $estadoReceptor, $municipioReceptor, $ciudadReceptor, $coloniaReceptor, $numExtReceptor, $numIntReceptor, $calleReceptor, $cpReceptor, $manzanaReceptor, $createdBy);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
             }

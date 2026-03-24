@@ -4,6 +4,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
 require 'pdf.php';
 require_once 'log_helper.php';
+require_once 'auth_user_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();
@@ -13,8 +14,9 @@ session_start();
 
 $client = new \GuzzleHttp\Client();
 
-$username = $_SESSION['username'];
-$userID = $_SESSION['userID'];
+$authUser = getAuthenticatedUserData();
+$username = $authUser['username'];
+$userID = $authUser['userID'];
 
 $tokenData = [];
 $token = "";
@@ -718,13 +720,14 @@ try {
 
         // Inserción en la tabla pagos y pagos_facturas
         try {
-            $sql = "INSERT INTO pagos(importepagado, saldoanterior, saldoinsoluto, parcialidad, uuid, idFactura, fecha, rutaXml) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO pagos(importepagado, saldoanterior, saldoinsoluto, parcialidad, uuid, idFactura, fecha, rutaXml, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $con->prepare($sql);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
             }
             
-            $stmt->bind_param("ssssssss", $importePagado, $saldoAnterior, $saldoInsoluto, $numeroParcialidad, $uuid, $idFacturasString, $fechaExpedicion, $nombre);
+            $createdBy = intval($userID);
+            $stmt->bind_param("ssssssssi", $importePagado, $saldoAnterior, $saldoInsoluto, $numeroParcialidad, $uuid, $idFacturasString, $fechaExpedicion, $nombre, $createdBy);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
                 logToFile($username, $userID, 'Error al ejecutar el INSERT del pago: '.$stmt->error, "error");

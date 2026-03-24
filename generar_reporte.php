@@ -39,7 +39,16 @@ $cuenta_facturacion = isset($data['cuenta_facturacion']) ? $data['cuenta_factura
 $cliente = isset($data['cliente']) ? $data['cliente'] : null;
 $estado = isset($data['estado']) ? $data['estado'] : null;
 $estado_pago = isset($data['estado_pago']) ? $data['estado_pago'] : null;
+$created_by = isset($data['created_by']) ? $data['created_by'] : null;
+$users_map = isset($data['users_map']) && is_array($data['users_map']) ? $data['users_map'] : [];
 $tipo = isset($data['tipo']) ? $data['tipo'] : null;
+
+$usersLookup = [];
+foreach ($users_map as $userItem) {
+    if (isset($userItem['id']) && isset($userItem['name'])) {
+        $usersLookup[(int)$userItem['id']] = $userItem['name'];
+    }
+}
 
 logToFile('0', '0', 'Data recibida en generar_reporte.php', json_encode($data));
 
@@ -110,11 +119,18 @@ try {
         $whereFacturas .= " AND pagado = ?";
         $paramsFacturas[] = $estado_pago;
     }
+    if($created_by){
+        $whereFacturas .= " AND f.created_by = ?";
+        $paramsFacturas[] = $created_by;
+
+        $wherePagos .= " AND p.created_by = ?";
+        $paramsPagos[] = $created_by;
+    }
 
     $whereFacturas .= " ORDER BY f.id ASC";
     $wherePagos .= " ORDER BY pf.id ASC";
 
-    $sql = "SELECT f.id, f.status, f.total, f.cliente, f.fecha, f.cfdi, f.tipoCfdi, f.uuid, f.metodoPago, f.formaPago, f.moneda, f.lugarExpedicion, f.subTotal, f.serie, f.folio, f.saldoInsoluto, f.pagado, f.anticipo, f.id_relacion, f.emisor, f.saldoInsoluto, cf.rfc as rfc_emisor
+    $sql = "SELECT f.id, f.status, f.total, f.cliente, f.fecha, f.cfdi, f.tipoCfdi, f.uuid, f.metodoPago, f.formaPago, f.moneda, f.lugarExpedicion, f.subTotal, f.serie, f.folio, f.saldoInsoluto, f.pagado, f.anticipo, f.id_relacion, f.emisor, f.saldoInsoluto, f.created_by, cf.rfc as rfc_emisor
             FROM facturas as f
             INNER JOIN cuenta_factura as cf ON f.emisor = cf.id
             $whereFacturas";
@@ -128,7 +144,7 @@ try {
         $facturas[] = $row;
     }
 
-    $sql = "SELECT pf.id, pf.fkPago, pf.fkFactura, pf.importePagado, pf.saldoAnterior, pf.saldoInsoluto, pf.parcialidad, pf.fecha, p.emisor, p.status, p.uuid, p.formaPago, cf.rfc as rfc_emisor, f.cliente, f.total
+    $sql = "SELECT pf.id, pf.fkPago, pf.fkFactura, pf.importePagado, pf.saldoAnterior, pf.saldoInsoluto, pf.parcialidad, pf.fecha, p.emisor, p.status, p.uuid, p.formaPago, p.created_by, cf.rfc as rfc_emisor, f.cliente, f.total
             FROM pagos_facturas as pf
             INNER JOIN pagos as p ON pf.fkPago = p.idPago
             INNER JOIN cuenta_factura as cf ON p.emisor = cf.id
@@ -165,7 +181,7 @@ try {
         $sheet->setCellValue('H1', 'Saldo Insoluto');
         $sheet->setCellValue('I1', 'Parcialidad');
         $sheet->setCellValue('J1', 'Estado');
-        $sheet->setCellValue('K1', 'Pago');
+        $sheet->setCellValue('K1', 'Creado Por');
         $sheet->setCellValue('L1', 'Tipo CFDI');
         $sheet->setCellValue('M1', 'RFC Emisor');
         $sheet->setCellValue('N1', 'UUID');
@@ -317,7 +333,9 @@ try {
             $sheet->setCellValue('H' . $row, $factura['saldoInsoluto'] ?? '');
             $sheet->setCellValue('I' . $row, $factura['parcialidad'] ?? '');
             $sheet->setCellValue('J' . $row, $status ?? '');
-            $sheet->setCellValue('K' . $row, isset($factura['pagado']) ? ($factura['pagado'] === 1 ? 'Pagada' : 'Pendiente') : '');
+            $createdById = isset($factura['created_by']) ? (int)$factura['created_by'] : 0;
+            $createdByName = isset($usersLookup[$createdById]) ? $usersLookup[$createdById] : ($createdById > 0 ? 'ID ' . $createdById : 'N/A');
+            $sheet->setCellValue('K' . $row, $createdByName);
             $sheet->setCellValue('L' . $row, $tipoCfdi ?? '');
             $sheet->setCellValue('M' . $row, $factura['rfc_emisor'] ?? '');
             $sheet->setCellValue('N' . $row, $factura['uuid'] ?? '');

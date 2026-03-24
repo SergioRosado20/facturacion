@@ -4,6 +4,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);*/
 require 'pdfFinezza.php';
 require_once 'log_helper.php';
+require_once 'auth_user_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();
@@ -19,7 +20,9 @@ $password = '@VMnmko74700';
 //$usuario = 'PruebasTimbrado';
 //$password = '@Notiene1';
 
-$username = $_SESSION['username'];
+$authUser = getAuthenticatedUserData();
+$username = $authUser['username'];
+$userID = $authUser['userID'];
 
 $tokenData = [];
 $token = "";
@@ -30,6 +33,8 @@ $json_data = json_decode($json, true);
 
 // Decodificar el JSON a un array asociativo
 $data = json_decode($json, true);
+$data_string = json_encode($data);
+logToFile($username, $userID, 'Datos recibidos para nota de credito', "success", $data_string);
 
 $prods = $data['prods']; // Acceder a 'prods'
 $descuento = isset($data['descuento']) ? $data['descuento'] : null; // Acceder a 'descuento'
@@ -509,7 +514,7 @@ try {
         "Conceptos" => $conceptos,
     ];
     //var_dump($data);
-    $responseFactura = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/timbrar/json', [
+    $responseFactura = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/timbrar/json', [
         'json' => $data,
         'headers' => [
             'accept' => 'application/json',
@@ -533,22 +538,25 @@ try {
 
         // Generar el XML y PDF base64
         try {
-            $sql = "INSERT INTO notas_pagos(idFactura, uuid, fecha, rutaXml, total, emisor) VALUES (?, ?, ?, ?, ?, ?)";
+            $createdBy = intval($userID);
+            $sql = "INSERT INTO notas_pagos(idFactura, uuid, fecha, rutaXml, total, emisor, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)";
             $stmt = $con->prepare($sql);
             if ($stmt === false) {
                 throw new Exception("Error en la preparación de la consulta: " . $con->error);
             }
-            $stmt->bind_param("issssi", $idFactura, $uuid, $fechaExpedicion, $nombre, $totalAjustado, $cuenta);
+            $stmt->bind_param("issssii", $idFactura, $uuid, $fechaExpedicion, $nombre, $totalAjustado, $cuenta, $createdBy);
             if (!$stmt->execute()) {
                 throw new Exception("Error en la ejecución de la consulta: " . $stmt->error);
             }
             $idNota = $con->insert_id;
             $stmt->close();
+            logToFile($username, $userID, 'Nota de credito registrada en BD', "success", json_encode(['idNota' => $idNota, 'idFactura' => $idFactura]));
         } catch (Exception $e) {
             echo json_encode([
                 'status' => 'error',
                 'message' => $e->getMessage()
             ]);
+            logToFile($username, $userID, 'Error al registrar nota de credito', "error", $e->getMessage());
             exit;
         }
 
@@ -597,6 +605,7 @@ try {
             'idFactura' => $idFactura,
             'z' => true
         ]);
+        logToFile($username, $userID, 'Nota de credito generada correctamente', "success", json_encode(['idFactura' => $idFactura]));
     } else {
         echo json_encode([
             'status' => 'error',
@@ -604,6 +613,7 @@ try {
             'content' => $content,
             'cuerpo' => $data,
         ]);
+        logToFile($username, $userID, 'Error de timbrado en nota de credito', "error", json_encode($content, true));
         exit;
     }
 } catch (Exception $e) {
@@ -611,6 +621,7 @@ try {
         'status' => 'error',
         'message' => 'Error en la solicitud de la factura: ' . $e->getMessage()
     ]);
+    logToFile($username, $userID, 'Excepcion en gen_nota_credito.php', "error", $e->getMessage());
     exit;
 }
 

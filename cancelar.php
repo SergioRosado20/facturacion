@@ -1,6 +1,7 @@
 <?php
 require 'pdf.php';
 require_once 'log_helper.php';
+require_once 'auth_user_helper.php';
 require_once('vendor/autoload.php');
 require_once "cors.php";
 cors();
@@ -10,8 +11,9 @@ session_start();
 
 $client = new \GuzzleHttp\Client();
 
-$username = $_SESSION['username'];
-$userID = $_SESSION['userID'];
+$authUser = getAuthenticatedUserData();
+$username = $authUser['username'];
+$userID = $authUser['userID'];
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->load();
@@ -212,9 +214,9 @@ if($factura_id) {
             $body["folioFiscalSustitucion"] = $uuid_sustitucion;
         }
 
-        logToFile('', 'Cancelar', json_encode($body, true), "success");
+        logToFile($username, $userID, 'Solicitud de cancelacion enviada', "success", json_encode($body, true));
 
-        $resCancelacion = $client->request('POST', 'https://testapi.facturoporti.com.mx/servicios/cancelar/csd', [
+        $resCancelacion = $client->request('POST', 'https://api.facturoporti.com.mx/servicios/cancelar/csd', [
             'body' => json_encode($body),
             'headers' => [
                 'accept' => 'application/json',
@@ -287,12 +289,13 @@ if($factura_id) {
                 
                         $stmtUpdate->close();
                     } else {
+                        $createdBy = intval($userID);
                         if($pago == '1') {
-                            $sqlInsert = "INSERT INTO `cancelaciones`(`pago`, `uuid`, `uuid_sustitucion`, `mensaje`, `acuse`, `codigoEstatus`, `esCancelable`, `estado`, `estatusCancelacion`, `fecha_creacion`, `fecha_actu`) 
-                                        VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+                            $sqlInsert = "INSERT INTO `cancelaciones`(`pago`, `uuid`, `uuid_sustitucion`, `mensaje`, `acuse`, `codigoEstatus`, `esCancelable`, `estado`, `estatusCancelacion`, `fecha_creacion`, `fecha_actu`, `created_by`) 
+                                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
                         } else {
-                            $sqlInsert = "INSERT INTO `cancelaciones`(`folio`, `uuid`, `uuid_sustitucion`, `mensaje`, `acuse`, `codigoEstatus`, `esCancelable`, `estado`, `estatusCancelacion`, `fecha_creacion`, `fecha_actu`) 
-                                        VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+                            $sqlInsert = "INSERT INTO `cancelaciones`(`folio`, `uuid`, `uuid_sustitucion`, `mensaje`, `acuse`, `codigoEstatus`, `esCancelable`, `estado`, `estatusCancelacion`, `fecha_creacion`, `fecha_actu`, `created_by`) 
+                                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
                         }
 
                         $stmtInsert = $con->prepare($sqlInsert);
@@ -300,7 +303,7 @@ if($factura_id) {
                             throw new Exception("Error en la preparación del INSERT: " . $con->error);
                         }
                 
-                        $stmtInsert->bind_param("sssssssssss", $factura_id, $uuid, $uuid_sustitucion, $mensaje, $acuse, $codigoEstatus, $esCancelable, $estado, $estatusCancelacion, $fechaActual, $fechaActual);
+                        $stmtInsert->bind_param("sssssssssssi", $factura_id, $uuid, $uuid_sustitucion, $mensaje, $acuse, $codigoEstatus, $esCancelable, $estado, $estatusCancelacion, $fechaActual, $fechaActual, $createdBy);
                         if (!$stmtInsert->execute()) {
                             throw new Exception("Error en la ejecución del INSERT: " . $stmtInsert->error);
                         }

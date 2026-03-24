@@ -36,7 +36,7 @@ if (!in_array($tabla, $tablasPermitidas)) {
 $termino = "%" . $con->real_escape_string($termino) . "%"; // Para LIKE
 
 // Array de claves específicas que quieres buscar
-$clavesArray = ['80141605', '80141500', '82121500', '82121908', 'H87', 'E48'];
+$clavesArray = ['80141605', '80141500', '82121500', '82121908', '78102205', 'H87', 'E48'];
 
 // Crear placeholders dinámicamente para el IN clause
 $placeholders = str_repeat('?,', count($clavesArray) - 1) . '?';
