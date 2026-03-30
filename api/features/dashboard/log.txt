@@ -1,0 +1,588 @@
+Fecha: 2026-03-30 13:06:58
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"ABC8501011A2"} | FILTERS: {"customer_rfc":"ABC8501011A2","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:06:58
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'ABC8501011A2' 
+-------------------------
+Fecha: 2026-03-30 13:06:58
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'ABC8501011A2' 
+-------------------------
+Fecha: 2026-03-30 13:06:58
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=ABC8501011A2 | totales.monto_pendiente=0
+-------------------------
+Fecha: 2026-03-30 13:07:11
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"LOCL561231GR8"} | FILTERS: {"customer_rfc":"LOCL561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:07:11
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:07:12
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:07:12
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=LOCL561231GR8 | totales.monto_pendiente=5.35
+-------------------------
+Fecha: 2026-03-30 13:07:13
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"LOCL561231GR8"} | FILTERS: {"customer_rfc":"LOCL561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:07:14
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:07:14
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:07:14
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=LOCL561231GR8 | totales.monto_pendiente=5.35
+-------------------------
+Fecha: 2026-03-30 13:07:53
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:07:53
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:07:54
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:07:54
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
+Fecha: 2026-03-30 13:07:59
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:08:00
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:08:00
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:08:00
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
+Fecha: 2026-03-30 13:10:40
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:10:41
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:10:42
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:10:42
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
+Fecha: 2026-03-30 13:14:56
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"LOCL561231GR8"} | FILTERS: {"customer_rfc":"LOCL561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:14:57
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:14:58
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:14:58
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=LOCL561231GR8 | totales.monto_pendiente=5.35
+-------------------------
+Fecha: 2026-03-30 13:15:03
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"ABC8501011A2"} | FILTERS: {"customer_rfc":"ABC8501011A2","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:15:03
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'ABC8501011A2' 
+-------------------------
+Fecha: 2026-03-30 13:15:03
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'ABC8501011A2' 
+-------------------------
+Fecha: 2026-03-30 13:15:03
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=ABC8501011A2 | totales.monto_pendiente=0
+-------------------------
+Fecha: 2026-03-30 13:15:07
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"GODE561231GR8"} | FILTERS: {"customer_rfc":"GODE561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:15:07
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'GODE561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:15:07
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'GODE561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:15:07
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=GODE561231GR8 | totales.monto_pendiente=196.5
+-------------------------
+Fecha: 2026-03-30 13:15:09
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"LOCL561231GR8"} | FILTERS: {"customer_rfc":"LOCL561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:15:09
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:15:10
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:15:10
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=LOCL561231GR8 | totales.monto_pendiente=5.35
+-------------------------
+Fecha: 2026-03-30 13:15:15
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"GODE561231GR8"} | FILTERS: {"customer_rfc":"GODE561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:15:15
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'GODE561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:15:15
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'GODE561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:15:15
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=GODE561231GR8 | totales.monto_pendiente=196.5
+-------------------------
+Fecha: 2026-03-30 13:15:18
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"LOCL561231GR8"} | FILTERS: {"customer_rfc":"LOCL561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:15:18
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:15:19
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:15:19
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=LOCL561231GR8 | totales.monto_pendiente=5.35
+-------------------------
+Fecha: 2026-03-30 13:47:36
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:47:37
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:47:38
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:47:38
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
+Fecha: 2026-03-30 13:48:07
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"LOCL561231GR8"} | FILTERS: {"customer_rfc":"LOCL561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:48:08
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:48:08
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:48:08
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=LOCL561231GR8 | totales.monto_pendiente=5.35
+-------------------------
+Fecha: 2026-03-30 13:48:11
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"LOCL561231GR8"} | FILTERS: {"customer_rfc":"LOCL561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:48:12
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:48:12
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'LOCL561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:48:12
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=LOCL561231GR8 | totales.monto_pendiente=5.35
+-------------------------
+Fecha: 2026-03-30 13:48:29
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing","customer_rfc":"GODE561231GR8"} | FILTERS: {"customer_rfc":"GODE561231GR8","created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:48:29
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'GODE561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:48:29
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1  AND facturas.rfc_receptor = 'GODE561231GR8' 
+-------------------------
+Fecha: 2026-03-30 13:48:29
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=GODE561231GR8 | totales.monto_pendiente=196.5
+-------------------------
+Fecha: 2026-03-30 13:48:40
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:48:40
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:48:41
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:48:41
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
+Fecha: 2026-03-30 13:49:14
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:49:14
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:49:15
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:49:15
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
+Fecha: 2026-03-30 13:56:58
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:56:59
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:56:59
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:56:59
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
+Fecha: 2026-03-30 13:57:06
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 13:57:07
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:57:08
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 13:57:08
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
+Fecha: 2026-03-30 14:21:59
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] Raw request body
+Query result: Filters resolved
+Datos recibidos: RAW: {"view":"dashboard/billing"} | FILTERS: {"customer_rfc":null,"created_by":null,"fechaInicio":null,"fechaFin":null}
+-------------------------
+Fecha: 2026-03-30 14:22:00
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 14:22:01
+User name: dashboard_repo
+User Id: n/a
+Query: [getTotalsByCurrency] SQL WHERE
+Query result: executing
+Datos recibidos:  1=1 
+-------------------------
+Fecha: 2026-03-30 14:22:01
+User name: dashboard_api
+User Id: n/a
+Query: [dashboard/index.php] getDashboardData completed
+Query result: OK
+Datos recibidos: customer_rfc=NULL | totales.monto_pendiente=201.85
+-------------------------
