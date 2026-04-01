@@ -47,27 +47,27 @@ if ($view === 'dashboard/billing') {
     ];
 
     // LOG: raw request + resolved filters
-    logToFile(
-        'dashboard_api',
-        'n/a',
-        '[dashboard/index.php] Raw request body',
-        'Filters resolved',
-        'RAW: ' . $json . ' | FILTERS: ' . json_encode($filters)
-    );
+    // logToFile(
+    //     'dashboard_api',
+    //     'n/a',
+    //     '[dashboard/index.php] Raw request body',
+    //     'Filters resolved',
+    //     'RAW: ' . $json . ' | FILTERS: ' . json_encode($filters)
+    // );
 
     try {
         $service = new DashboardService($con);
         $dashboardData = $service->getDashboardData($filters);
 
         // LOG: confirm data returned without error
-        logToFile(
-            'dashboard_api',
-            'n/a',
-            '[dashboard/index.php] getDashboardData completed',
-            'OK',
-            'customer_rfc=' . ($filters['customer_rfc'] ?? 'NULL')
-            . ' | totales.monto_pendiente=' . ($dashboardData['totales']['monto_pendiente'] ?? 'N/A')
-        );
+        // logToFile(
+        //     'dashboard_api',
+        //     'n/a',
+        //     '[dashboard/index.php] getDashboardData completed',
+        //     'OK',
+        //     'customer_rfc=' . ($filters['customer_rfc'] ?? 'NULL')
+        //     . ' | totales.monto_pendiente=' . ($dashboardData['totales']['monto_pendiente'] ?? 'N/A')
+        // );
 
         echo json_encode([
             'error' => false,
@@ -76,7 +76,7 @@ if ($view === 'dashboard/billing') {
         ]);
         
     } catch (Exception $e) {
-        logToFile('dashboard_api', 'n/a', '[dashboard/index.php] EXCEPTION', $e->getMessage(), '');
+        //logToFile('dashboard_api', 'n/a', '[dashboard/index.php] EXCEPTION', $e->getMessage(), '');
         echo json_encode([
             'error' => true,
             'message' => 'Error al procesar el dashboard: ' . $e->getMessage()

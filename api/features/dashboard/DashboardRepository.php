@@ -1,183 +1,153 @@
 <?php
 require_once dirname(__DIR__, 3) . '/log_helper.php';
 
+/**
+ * DashboardRepository
+ *
+ * FUENTE DE VERDAD: tabla `facturas`
+ *
+ * Campos usados para cálculos:
+ *   facturas.total         → monto emitido original
+ *   facturas.saldoInsoluto → saldo pendiente actualizado y sincronizado
+ *   facturas.status        → FK a factura_status (3 y 4 = canceladas, se excluyen)
+ *   facturas.metodoPago    → 'PUE' o 'PPD' (para desglose de ingresos)
+ *
+ * Reglas de negocio (campo `pagado` NO se usa en ningún cálculo):
+ *   saldoInsoluto <= 0  → factura considerada PAGADA
+ *   saldoInsoluto  > 0  → factura considerada PENDIENTE
+ *
+ * Identidad matemática garantizada:
+ *   monto_total = monto_pagado + monto_pendiente
+ *   SUM(total)  = SUM(total - saldoInsoluto) + SUM(saldoInsoluto)  → siempre cierra ✅
+ */
 class DashboardRepository {
     private $con;
+
+    // IDs de factura_status considerados CANCELADOS (excluidos de todos los totales)
+    const CANCELLED_STATUS = [3, 4];
 
     public function __construct($con) {
         $this->con = $con;
     }
 
     /**
-     * Construye la cláusula WHERE basada en los filtros recibidos.
-     * Soporta 'customer_rfc', 'created_by', 'fechaInicio' y 'fechaFin'.
+     * Fragmento SQL reutilizable para excluir facturas canceladas.
+     */
+    private function notCancelledClause($alias = 'facturas') {
+        $ids = implode(',', self::CANCELLED_STATUS);
+        return "$alias.status NOT IN ($ids)";
+    }
+
+    /**
+     * WHERE general para queries sobre `facturas`.
+     * Siempre incluye exclusión de canceladas.
      */
     public function buildWhereClause($filters, $tableAlias = 'facturas') {
-        $where = " 1=1 ";
-        
+        $where = " 1=1 AND {$this->notCancelledClause($tableAlias)} ";
+
         if (!empty($filters['customer_rfc'])) {
-            $customer_rfc = $this->con->real_escape_string($filters['customer_rfc']);
-            $where .= " AND $tableAlias.rfc_receptor = '$customer_rfc' ";
+            $v = $this->con->real_escape_string($filters['customer_rfc']);
+            $where .= " AND $tableAlias.rfc_receptor = '$v' ";
         }
-        
         if (!empty($filters['created_by'])) {
-            $created_by = $this->con->real_escape_string($filters['created_by']);
-            $where .= " AND $tableAlias.created_by = '$created_by' ";
+            $v = $this->con->real_escape_string($filters['created_by']);
+            $where .= " AND $tableAlias.created_by = '$v' ";
         }
-
         if (!empty($filters['fechaInicio'])) {
-            $fechaInicio = $this->con->real_escape_string($filters['fechaInicio']);
-            $where .= " AND DATE($tableAlias.fecha) >= '$fechaInicio' ";
+            $v = $this->con->real_escape_string($filters['fechaInicio']);
+            $where .= " AND DATE($tableAlias.fecha) >= '$v' ";
         }
-
         if (!empty($filters['fechaFin'])) {
-            $fechaFin = $this->con->real_escape_string($filters['fechaFin']);
-            $where .= " AND DATE($tableAlias.fecha) <= '$fechaFin' ";
+            $v = $this->con->real_escape_string($filters['fechaFin']);
+            $where .= " AND DATE($tableAlias.fecha) <= '$v' ";
         }
 
         return $where;
     }
 
     /**
-     * Construye la cláusula WHERE para notas_pagos (notas de crédito).
-     * - La fecha se filtra contra notas_pagos (alias 'np').
-     * - El RFC del receptor y created_by se filtran contra facturas (alias 'f').
+     * WHERE para notas_pagos (alias 'np') con JOIN a facturas (alias 'f').
+     * Filtros de fecha → sobre np.fecha
+     * Filtros de cliente/cuenta → sobre f.*
      */
     public function buildWhereClauseNotas($filters) {
-        $where = " 1=1 ";
+        $ids   = implode(',', self::CANCELLED_STATUS);
+        $where = " 1=1 AND f.status NOT IN ($ids) ";
 
         if (!empty($filters['customer_rfc'])) {
-            $customer_rfc = $this->con->real_escape_string($filters['customer_rfc']);
-            $where .= " AND f.rfc_receptor = '$customer_rfc' ";
+            $v = $this->con->real_escape_string($filters['customer_rfc']);
+            $where .= " AND f.rfc_receptor = '$v' ";
         }
-
         if (!empty($filters['created_by'])) {
-            $created_by = $this->con->real_escape_string($filters['created_by']);
-            $where .= " AND f.created_by = '$created_by' ";
+            $v = $this->con->real_escape_string($filters['created_by']);
+            $where .= " AND f.created_by = '$v' ";
         }
-
         if (!empty($filters['fechaInicio'])) {
-            $fechaInicio = $this->con->real_escape_string($filters['fechaInicio']);
-            $where .= " AND DATE(np.fecha) >= '$fechaInicio' ";
+            $v = $this->con->real_escape_string($filters['fechaInicio']);
+            $where .= " AND DATE(np.fecha) >= '$v' ";
         }
-
         if (!empty($filters['fechaFin'])) {
-            $fechaFin = $this->con->real_escape_string($filters['fechaFin']);
-            $where .= " AND DATE(np.fecha) <= '$fechaFin' ";
+            $v = $this->con->real_escape_string($filters['fechaFin']);
+            $where .= " AND DATE(np.fecha) <= '$v' ";
         }
 
         return $where;
     }
 
+    /**
+     * Totales y desglose de ingresos agrupados por moneda.
+     *
+     * Columnas retornadas:
+     *   total_facturas     → cantidad de facturas activas
+     *   monto_total        → SUM(total)
+     *   facturas_pagadas   → COUNT donde saldoInsoluto <= 0
+     *   facturas_pendientes→ COUNT donde saldoInsoluto  > 0
+     *   monto_pagado       → SUM(total - saldoInsoluto)   — cobrado real (PUE + PPD)
+     *   monto_pendiente    → SUM(saldoInsoluto)           — sin filtro: garantiza monto_total = pagado + pendiente
+     *   monto_pagado_pue   → cobrado en facturas PUE
+     *   monto_pagado_ppd   → cobrado en facturas PPD
+     */
     public function getTotalsByCurrency($whereClause) {
-        $sql = "SELECT 
+        $sql = "SELECT
                     moneda,
-                    COUNT(id) as total_facturas,
-                    SUM(total) as monto_total,
-                    SUM(CASE WHEN saldoInsoluto <= 0 OR pagado = 1 THEN 1 ELSE 0 END) as facturas_pagadas,
-                    SUM(CASE WHEN metodoPago = 'PUE' THEN total ELSE 0 END) as monto_pagado_pue,
-                    SUM(CASE WHEN saldoInsoluto > 0 AND pagado = 0 THEN 1 ELSE 0 END) as facturas_pendientes,
-                    SUM(CASE WHEN saldoInsoluto > 0 AND pagado = 0 THEN saldoInsoluto ELSE 0 END) as monto_pendiente
-                FROM facturas 
+                    COUNT(id)                                                                                       AS total_facturas,
+                    SUM(total)                                                                                      AS monto_total,
+                    COUNT(CASE WHEN saldoInsoluto <= 0 THEN 1 END)                                                 AS facturas_pagadas,
+                    COUNT(CASE WHEN saldoInsoluto  > 0 THEN 1 END)                                                 AS facturas_pendientes,
+                    SUM(total - COALESCE(saldoInsoluto, 0))                                                        AS monto_pagado,
+                    SUM(COALESCE(saldoInsoluto, 0))                                                                AS monto_pendiente,
+                    SUM(CASE WHEN metodoPago = 'PUE' THEN (total - COALESCE(saldoInsoluto, 0)) ELSE 0 END)         AS monto_pagado_pue,
+                    SUM(CASE WHEN metodoPago = 'PPD' THEN (total - COALESCE(saldoInsoluto, 0)) ELSE 0 END)         AS monto_pagado_ppd
+                FROM facturas
                 WHERE $whereClause
                 GROUP BY moneda";
 
-        // LOG: dump the WHERE clause to verify filters are injected
-        logToFile('dashboard_repo', 'n/a', '[getTotalsByCurrency] SQL WHERE', 'executing', $whereClause);
-        
         $result = $this->con->query($sql);
-        $data = [];
+        $data   = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
-                $moneda = empty($row['moneda']) ? 'MXN' : $row['moneda'];
+                $moneda        = empty($row['moneda']) ? 'MXN' : $row['moneda'];
                 $data[$moneda] = $row;
             }
         }
         return $data;
     }
 
-    public function getPaidPPDByCurrency($whereClauseAliasF) {
-        $sql = "SELECT 
-                    f.moneda,
-                    SUM(pf.importePagado) as sumatoria_pagos_ppd,
-                    COUNT(pf.id) as cantidad_pagos
-                FROM pagos_facturas pf
-                INNER JOIN facturas f ON pf.fkFactura = f.id
-                INNER JOIN pagos p ON pf.fkPago = p.idPago
-                WHERE $whereClauseAliasF 
-                  AND f.metodoPago = 'PPD'
-                  AND (p.status IS NULL OR p.status != 'Cancelado') 
-                  AND (f.status != 0)
-                GROUP BY f.moneda";
-                
-        $result = $this->con->query($sql);
-        $data = [];
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $moneda = empty($row['moneda']) ? 'MXN' : $row['moneda'];
-                $data[$moneda] = $row;
-            }
-        }
-        return $data;
-    }
-
+    /**
+     * Distribución por método de pago (pie chart).
+     */
     public function getPaymentMethodsAnalyticsByCurrency($whereClause) {
-        $sql = "SELECT 
-                    metodoPago, 
+        $sql = "SELECT
+                    metodoPago,
                     moneda,
-                    COUNT(id) as cantidad, 
-                    SUM(total) as monto 
-                FROM facturas 
+                    COUNT(id)  AS cantidad,
+                    SUM(total) AS monto
+                FROM facturas
                 WHERE $whereClause AND metodoPago IS NOT NULL
                 GROUP BY metodoPago, moneda";
-                
-        $result = $this->con->query($sql);
-        $data = [];
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $data[] = $row;
-            }
-        }
-        return $data;
-    }
 
-    public function getKPIsByCreatedByWithCurrency($whereClause) {
-        $sql = "SELECT 
-                    COALESCE(a.name, facturas.created_by, 'Desconocido') as account_name,
-                    facturas.moneda,
-                    COUNT(facturas.id) as total_facturas,
-                    SUM(CASE WHEN facturas.saldoInsoluto <= 0 OR facturas.pagado = 1 THEN 1 ELSE 0 END) as pagadas,
-                    SUM(CASE WHEN facturas.saldoInsoluto > 0 AND facturas.pagado = 0 THEN 1 ELSE 0 END) as pendientes,
-                    SUM(CASE WHEN facturas.saldoInsoluto > 0 AND facturas.pagado = 0 THEN facturas.saldoInsoluto ELSE 0 END) as monto_faltante
-                FROM facturas 
-                LEFT JOIN account a ON facturas.created_by = a.id
-                WHERE $whereClause 
-                GROUP BY a.name, facturas.created_by, facturas.moneda";
-                
         $result = $this->con->query($sql);
-        $data = [];
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $data[] = $row;
-            }
-        }
-        return $data;
-    }
-
-    public function getKPIsByClientWithCurrency($whereClause) {
-        $sql = "SELECT 
-                    COALESCE(c.name, facturas.rfc_receptor, 'Desconocido') as cliente,
-                    facturas.moneda,
-                    COUNT(facturas.id) as total_facturas,
-                    SUM(facturas.total) as monto_total,
-                    SUM(CASE WHEN facturas.saldoInsoluto > 0 AND facturas.pagado = 0 THEN facturas.saldoInsoluto ELSE 0 END) as monto_faltante
-                FROM facturas 
-                LEFT JOIN customer c ON facturas.rfc_receptor = c.rfc
-                WHERE $whereClause 
-                GROUP BY c.name, facturas.rfc_receptor, facturas.moneda";
-                
-        $result = $this->con->query($sql);
-        $data = [];
+        $data   = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
                 $data[] = $row;
@@ -187,26 +157,80 @@ class DashboardRepository {
     }
 
     /**
-     * Obtiene la sumatoria de egresos (notas de crédito / notas_pagos)
-     * agrupada por la moneda de la factura relacionada.
-     * Se une notas_pagos con facturas para poder aplicar filtros de fecha,
-     * RFC receptor y usuario creador.
+     * KPIs por cuenta/emisor agrupados por moneda.
+     *   pagadas      → saldoInsoluto <= 0
+     *   pendientes   → saldoInsoluto  > 0
+     *   monto_faltante → SUM(saldoInsoluto) de las pendientes
+     */
+    public function getKPIsByCreatedByWithCurrency($whereClause) {
+        $sql = "SELECT
+                    COALESCE(a.name, CAST(facturas.created_by AS CHAR), 'Desconocido') AS account_name,
+                    facturas.moneda,
+                    COUNT(facturas.id)                                                               AS total_facturas,
+                    COUNT(CASE WHEN facturas.saldoInsoluto <= 0 THEN 1 END)                          AS pagadas,
+                    COUNT(CASE WHEN facturas.saldoInsoluto  > 0 THEN 1 END)                          AS pendientes,
+                    SUM(CASE WHEN facturas.saldoInsoluto  > 0 THEN facturas.saldoInsoluto ELSE 0 END) AS monto_faltante
+                FROM facturas
+                LEFT JOIN account a ON facturas.created_by = a.id
+                WHERE $whereClause
+                GROUP BY a.name, facturas.created_by, facturas.moneda";
+
+        $result = $this->con->query($sql);
+        $data   = [];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $data[] = $row;
+            }
+        }
+        return $data;
+    }
+
+    /**
+     * KPIs por cliente (agrupado por RFC receptor) agrupados por moneda.
+     *   nombre → facturas.cliente (campo de texto de la factura)
+     *   monto_faltante → SUM(saldoInsoluto) de las pendientes
+     */
+    public function getKPIsByClientWithCurrency($whereClause) {
+        $sql = "SELECT
+                    facturas.rfc_receptor,
+                    MAX(facturas.cliente)                                                              AS cliente,
+                    facturas.moneda,
+                    COUNT(facturas.id)                                                                 AS total_facturas,
+                    SUM(facturas.total)                                                                AS monto_total,
+                    SUM(CASE WHEN facturas.saldoInsoluto > 0 THEN facturas.saldoInsoluto ELSE 0 END)   AS monto_faltante
+                FROM facturas
+                WHERE $whereClause
+                GROUP BY facturas.rfc_receptor, facturas.moneda";
+
+        $result = $this->con->query($sql);
+        $data   = [];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $data[] = $row;
+            }
+        }
+        return $data;
+    }
+
+    /**
+     * Sumatoria de egresos (notas de crédito) agrupada por moneda.
+     * notas_pagos.total representa el monto devuelto al cliente.
      */
     public function getEgresosByCurrency($whereClauseNotas) {
-        $sql = "SELECT 
+        $sql = "SELECT
                     f.moneda,
-                    SUM(np.total) as monto_egresos,
-                    COUNT(np.idNotaPago) as cantidad_notas
+                    SUM(np.total)        AS monto_egresos,
+                    COUNT(np.idNotaPago) AS cantidad_notas
                 FROM notas_pagos np
                 INNER JOIN facturas f ON np.idFactura = f.id
                 WHERE $whereClauseNotas
                 GROUP BY f.moneda";
 
         $result = $this->con->query($sql);
-        $data = [];
+        $data   = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
-                $moneda = empty($row['moneda']) ? 'MXN' : $row['moneda'];
+                $moneda        = empty($row['moneda']) ? 'MXN' : $row['moneda'];
                 $data[$moneda] = $row;
             }
         }
